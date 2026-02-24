@@ -1,0 +1,48 @@
+Axon: Unified Project Rules & Architectural Manifesto
+🎯 Core Mission
+Axon is a sovereign, high-performance biometric telemetry vault. Performance is a feature; privacy is an absolute. Every line of code must respect the offline-first, zero-knowledge architecture.
+
+🛠 Tech Stack & Coding Standards
+Runtime: .NET 10 (Strictly targeting Native AOT). Avoid heavy reflection or dynamic code generation that breaks AOT.
+
+Language: C# 14. Utilize records, primary constructors, and Span<T> for high-performance paths.
+
+UI: Avalonia UI (MVVM). Direct GPU rendering via SkiaSharp for all telemetry charts.
+
+Database: SQLite with SQLCipher (EF Core 10).
+
+Style: PascalCase for methods/classes, _camelCase for private fields. Use ValueTask for high-frequency operations.
+
+🏗 Architectural Constraints
+Hexagonal Architecture: Maintain a hard boundary between Axon.Core (Domain/Logic), Axon.Infrastructure (Drivers/Persistence), and Axon.UI (Presentation).
+
+Offline-First: All core functionality must work without an internet connection.
+
+Transactional Outbox: All external syncs (gRPC) must be written to a SyncOutbox table within the same transaction as the data change. Never perform I/O inside a DB transaction.
+
+ACS Normalization: Map all vendor-specific data (Whoop, Oura, Garmin) to the Axon Common Schema (ACS) immediately upon ingestion.
+
+💻 Performance & Memory Guardrails
+Low Allocation: Use ArrayPool<T> and Span<T> in ingestion loops to minimize GC pressure.
+
+120fps Target: The UI thread must never be blocked. Offload all ML.NET inference and heavy I/O to background tasks using Task.Run.
+
+LTTB Downsampling: Any data request spanning > 24 hours must use the Largest Triangle Three Buckets algorithm before reaching the UI layer.
+
+🔒 Security & Compliance (HIPAA/GDPR)
+Repository Decorators: Every repository must be wrapped in an AuditLoggingDecorator (HIPAA) and an EncryptionDecorator (GDPR).
+
+Zero-Knowledge: No hardcoded keys or salts. Keys must be derived via the hardware's TPM (Windows) or Secure Enclave (Mobile).
+
+PII Shield: Domain objects must mask sensitive values in ToString() or logging outputs to prevent biometric leaks.
+
+Air-Gap Integrity: Absolutely no 3rd-party telemetry, tracking pixels, or phone-home analytics.
+
+📝 Definition of Done (DoD)
+Code is verified Native AOT compatible.
+
+The NormalizationMapper for the data source has 100% unit test coverage.
+
+Memory profiling shows zero "hot path" heap allocations.
+
+Documentation updated for any new IBiometricDriver implementations.

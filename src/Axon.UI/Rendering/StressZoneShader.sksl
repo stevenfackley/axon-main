@@ -1,0 +1,89 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Axon Telemetry — Stress Zone Background Shader
+// Language: SKSL (Skia Shading Language)
+// Target:   SkiaSharp 2.x / Skia milestone 119+
+//
+// PURPOSE
+// ───────
+// Renders a vertically segmented gradient background behind the heart-rate
+// telemetry line that communicates cardiovascular "stress zones":
+//
+//   Zone 1 (Recovery)   0 – 50% of chart height    Teal → Blue
+//   Zone 2 (Aerobic)   50 – 75% of chart height    Blue → Amber
+//   Zone 3 (Anaerobic) 75 – 90% of chart height    Amber → Orange
+//   Zone 4 (Red-Line)  90 – 100% of chart height   Orange → Deep Red
+//
+// The shader is parameterized via uniforms so the host C# code can adjust
+// zone boundaries and colors at runtime without recompilation.
+//
+// PERFORMANCE NOTES
+// ─────────────────
+// • Fragment-shader execution is fully GPU-resident — zero CPU cost per pixel.
+// • The shader is compiled once via SKRuntimeEffect.CreateShader and cached.
+//   Subsequent frames reuse the compiled program, updating only the uniforms.
+// • No texture lookups or branching beyond the linear zone mix — suitable for
+//   execution on low-power mobile GPU tile processors.
+// ─────────────────────────────────────────────────────────────────────────────
+
+uniform float2 iResolution;       // Viewport size in pixels (width, height)
+uniform float  iTime;             // Elapsed time in seconds (for subtle animation)
+
+// Zone boundary Y-thresholds expressed as normalized 0–1 values
+// (0 = top of chart, 1 = bottom of chart).
+uniform float zone1End;           // Default: 0.50  (Recovery / Aerobic boundary)
+uniform float zone2End;           // Default: 0.75  (Aerobic / Anaerobic boundary)
+uniform float zone3End;           // Default: 0.90  (Anaerobic / Red-line boundary)
+
+// Zone colors (RGBA, linear sRGB)
+uniform float4 colorRecovery;     // Default: #0D9488 teal-600
+uniform float4 colorAerobic;      // Default: #2563EB blue-600
+uniform float4 colorAnaerobic;    // Default: #D97706 amber-600
+uniform float4 colorRedLine;      // Default: #DC2626 red-600
+
+// Opacity multiplier for the entire gradient (0 = transparent, 1 = opaque)
+uniform float  backgroundAlpha;   // Default: 0.18  (subtle, doesn't occlude line)
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Smooth-step the boundary transitions so zone edges feather naturally.
+/// width controls how many normalized-Y units the crossfade spans.
+float zoneMix(float normalY, float boundary, float width) {
+    return smoothstep(boundary - width, boundary + width, normalY);
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+half4 main(float2 fragCoord) {
+    // Normalized Y in [0, 1]; 0 = chart top (high HR), 1 = chart bottom (low HR).
+    float normY = fragCoord.y / iResolution.y;
+
+    // ── Zone blending ─────────────────────────────────────────────────────────
+    // We chain four zone colors using smoothstep crossfades at each boundary.
+    // Using 0.03 feather width (3% of chart height) for smooth transitions.
+    float feather = 0.03;
+
+    float t12 = zoneMix(normY, zone1End, feather);   // Recovery → Aerobic
+    float t23 = zoneMix(normY, zone2End, feather);   // Aerobic  → Anaerobic
+    float t34 = zoneMix(normY, zone3End, feather);   // Anaerobic → Red-line
+
+    // Mix recovery → aerobic, then blend in anaerobic, then red-line.
+    float4 blended = mix(colorRecovery, colorAerobic,   t12);
+    blended        = mix(blended,       colorAnaerobic, t23);
+    blended        = mix(blended,       colorRedLine,   t34);
+
+    // ── Subtle animated luminosity pulse ──────────────────────────────────────
+    // A very low-amplitude sine wave (±2% brightness) gives the background
+    // a living, breathing quality without distracting from the data line.
+    float pulse = 1.0 + 0.02 * sin(iTime * 0.8 + normY * 3.14159);
+    blended.rgb *= pulse;
+
+    // ── Vertical vignette ─────────────────────────────────────────────────────
+    // Darken the top and bottom edges slightly to frame the chart content.
+    float vignette = 1.0 - 0.25 * pow(abs(normY * 2.0 - 1.0), 3.0);
+    blended.rgb *= vignette;
+
+    // Apply global alpha — keep the gradient subtle so data lines read clearly.
+    blended.a = backgroundAlpha;
+
+    return half4(blended);
+}

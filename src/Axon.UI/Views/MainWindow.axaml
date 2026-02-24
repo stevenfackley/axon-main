@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Axon.UI.ViewModels"
+        xmlns:views="using:Axon.UI.Views"
+        x:Class="Axon.UI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Axon — Sovereign Biometric Vault"
+        Width="1280" Height="800"
+        MinWidth="960" MinHeight="600"
+        Background="#0F0F1A">
+
+    <!--
+        Shell layout:
+          Row 0 — global nav / sync status bar
+          Row 1 — active content page (expands to fill)
+
+        The MainView (dashboard) is bound to MainWindowViewModel.Dashboard
+        so the SkiaTelemetryChart gets its DashboardViewModel DataContext
+        without any code-behind coupling.
+    -->
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ── Global nav / sync status bar ──────────────────────────────── -->
+        <Border Grid.Row="0"
+                Background="#13131F"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,0,0,1"
+                Padding="16,6">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <!-- Brand -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="⬡"
+                               FontSize="18" Foreground="#00FFC8"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="AXON"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="#E5E7EB"
+                               VerticalAlignment="Center"
+                               LetterSpacing="3" />
+                </StackPanel>
+
+                <!-- Sync status indicator -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+
+                    <!-- Air-gap badge -->
+                    <Border Background="#1F2937" CornerRadius="6" Padding="8,3"
+                            IsVisible="{Binding AirGapEnabled}">
+                        <TextBlock Text="AIR-GAP"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="#F59E0B"
+                                   LetterSpacing="1.5" />
+                    </Border>
+
+                    <!-- Pending outbox count -->
+                    <Border Background="#1F2937" CornerRadius="6" Padding="8,3"
+                            IsVisible="{Binding PendingOutboxCount}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="OUTBOX"
+                                       FontSize="10" Foreground="#6B7280"
+                                       LetterSpacing="1" />
+                            <TextBlock Text="{Binding PendingOutboxCount}"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="#9CA3AF" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Sync status dot -->
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center">
+                        <Ellipse.Fill>
+                            <SolidColorBrush Color="#34D399" />
+                        </Ellipse.Fill>
+                    </Ellipse>
+
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── Dashboard content ─────────────────────────────────────────── -->
+        <!--
+            DataContext is explicitly forwarded to Dashboard so MainView's
+            x:DataType="vm:DashboardViewModel" compiled binding resolves correctly.
+        -->
+        <views:MainView Grid.Row="1"
+                        DataContext="{Binding Dashboard}" />
+
+    </Grid>
+</Window>

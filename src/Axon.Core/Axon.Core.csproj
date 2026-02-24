@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Target net9.0 until .NET 10 SDK is installed; bump to net10.0 then -->
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <!-- Native AOT: no reflection-based serialization -->
+    <PublishAot>true</PublishAot>
+    <TrimmerRootDescriptor>TrimmerRoots.xml</TrimmerRootDescriptor>
+    <AssemblyName>Axon.Core</AssemblyName>
+    <RootNamespace>Axon.Core</RootNamespace>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- AOT-safe JSON via source generator -->
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="9.*" />
+  </ItemGroup>
+
+</Project>

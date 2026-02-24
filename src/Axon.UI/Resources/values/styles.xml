@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme used by MainActivity -->
+    <!-- Inherits from the platform-bundled no-title theme; no AppCompat needed -->
+    <style name="MyTheme.NoActionBar" parent="@android:style/Theme.NoTitleBar">
+        <!-- Avalonia draws its own chrome; keep the system window transparent -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

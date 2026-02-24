@@ -1,0 +1,180 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Axon.UI.ViewModels"
+             xmlns:chart="using:Axon.UI.Rendering"
+             x:Class="Axon.UI.Views.MainView"
+             x:DataType="vm:DashboardViewModel"
+             Background="#0F0F1A">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ── Status Bar (vital cards) ──────────────────────────────────── -->
+        <Border Grid.Row="0"
+                Background="#1A1A2E"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,0,0,1"
+                Padding="16,10">
+            <StackPanel Orientation="Horizontal" Spacing="24">
+
+                <!-- Heart Rate card -->
+                <StackPanel>
+                    <TextBlock Text="HEART RATE"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#6B7280" LetterSpacing="1.5" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding HeartRate, StringFormat={}{0:F0}}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="#00FFC8" />
+                        <TextBlock Text="bpm"
+                                   FontSize="12" VerticalAlignment="Bottom"
+                                   Foreground="#6B7280" Margin="0,0,0,4" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Separator -->
+                <Border Width="1" Background="#2D2D4E" Margin="0,4" />
+
+                <!-- HRV card -->
+                <StackPanel>
+                    <TextBlock Text="HRV"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#6B7280" LetterSpacing="1.5" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding HeartRateVariability, StringFormat={}{0:F0}}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="#A78BFA" />
+                        <TextBlock Text="ms"
+                                   FontSize="12" VerticalAlignment="Bottom"
+                                   Foreground="#6B7280" Margin="0,0,0,4" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Separator -->
+                <Border Width="1" Background="#2D2D4E" Margin="0,4" />
+
+                <!-- SpO2 card -->
+                <StackPanel>
+                    <TextBlock Text="SPO₂"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#6B7280" LetterSpacing="1.5" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding SpO2, StringFormat={}{0:F1}}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="#38BDF8" />
+                        <TextBlock Text="%"
+                                   FontSize="12" VerticalAlignment="Bottom"
+                                   Foreground="#6B7280" Margin="0,0,0,4" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Separator -->
+                <Border Width="1" Background="#2D2D4E" Margin="0,4" />
+
+                <!-- Recovery score card -->
+                <StackPanel>
+                    <TextBlock Text="RECOVERY"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#6B7280" LetterSpacing="1.5" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding RecoveryScore, StringFormat={}{0:F0}}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="#34D399" />
+                        <TextBlock Text="%"
+                                   FontSize="12" VerticalAlignment="Bottom"
+                                   Foreground="#6B7280" Margin="0,0,0,4" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Separator -->
+                <Border Width="1" Background="#2D2D4E" Margin="0,4" />
+
+                <!-- Readiness score card -->
+                <StackPanel>
+                    <TextBlock Text="READINESS"
+                               FontSize="10" FontWeight="SemiBold"
+                               Foreground="#6B7280" LetterSpacing="1.5" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding ReadinessScore, StringFormat={}{0:F0}}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="#FBBF24" />
+                        <TextBlock Text="%"
+                                   FontSize="12" VerticalAlignment="Bottom"
+                                   Foreground="#6B7280" Margin="0,0,0,4" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Spacer -->
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center"
+                            IsVisible="{Binding HasAnomalies}">
+                    <Border Background="#EF4444" CornerRadius="12" Padding="10,4">
+                        <TextBlock FontSize="12" FontWeight="Bold" Foreground="White">
+                            <Run Text="{Binding AnomalyCount}" />
+                            <Run Text=" ANOMALY" />
+                        </TextBlock>
+                    </Border>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ── Main telemetry chart (SkiaSharp GPU render) ───────────────── -->
+        <chart:SkiaTelemetryChart
+            Grid.Row="1"
+            Points="{Binding ChartPoints}"
+            AnomalyMarkers="{Binding AnomalyMarkers}"
+            MinValue="40"
+            MaxValue="200"
+            BackgroundAlpha="0.18"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch" />
+
+        <!-- ── Loading overlay ───────────────────────────────────────────── -->
+        <Border Grid.Row="1"
+                Background="#80000000"
+                IsVisible="{Binding IsLoading}"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                <TextBlock Text="Loading telemetry…"
+                           FontSize="16" Foreground="White"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- ── Error banner ──────────────────────────────────────────────── -->
+        <Border Grid.Row="1"
+                Background="#CC7F1D1D"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                VerticalAlignment="Top"
+                Padding="16,8">
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FCA5A5" FontSize="13" />
+        </Border>
+
+        <!-- ── Footer / viewport range ───────────────────────────────────── -->
+        <Border Grid.Row="2"
+                Background="#1A1A2E"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,1,0,0"
+                Padding="16,8">
+            <Grid ColumnDefinitions="*,Auto,*">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding ViewportStart, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                           FontSize="11" Foreground="#6B7280"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ActiveChartType}"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="#9CA3AF"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding ViewportEnd, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                           FontSize="11" Foreground="#6B7280"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>

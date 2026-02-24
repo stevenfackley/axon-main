@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Health Connect Permissions Manifest
+    =============================================
+    Required for 2026 Google Play submission.
+    Docs: https://developer.android.com/health-and-fitness/guides/health-connect/develop/get-started
+
+    Steps to complete before Play Store submission:
+      1. Add <queries> block below to the root AndroidManifest.xml so Android resolves
+         Health Connect at runtime (required for API < 34 compatibility).
+      2. Declare each permission in the <uses-permission> block.
+      3. Provide a RATIONALE Activity matching the intent filter below (Store requirement).
+      4. Submit to Google's Health Connect permission review process.
+
+    Note: Health Connect permissions are classified as "sensitive" since Android 14.
+    The user must grant them explicitly via the Health Connect system UI, not a
+    runtime permission dialog. Axon MUST NOT request them silently at startup.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.axon.telemetry">
+
+    <!-- ── Health Connect package visibility (API < 34) ──────────────────── -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+    </queries>
+
+    <!-- ── Health Connect read permissions ───────────────────────────────── -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE" />
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
+    <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_POWER" />
+
+    <!-- ── Health Connect write permissions (Axon-synthesised data) ──────── -->
+    <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
+
+    <!-- ── Background sync: required for HK background-delivery equivalent ─ -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+
+    <application
+        android:label="Axon"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.Axon">
+
+        <!-- ── Health Connect permissions rationale Activity ───────────────
+             Google Play REQUIRES this Activity to be declared when requesting
+             Health Connect permissions. Its purpose: show a transparent
+             privacy policy screen before the system Health Connect dialog.
+        ─────────────────────────────────────────────────────────────────── -->
+        <activity
+            android:name=".HealthConnectRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Background Health Connect data sync service ──────────────── -->
+        <service
+            android:name=".sync.HealthConnectSyncService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+    </application>
+
+</manifest>

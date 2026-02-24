@@ -1,0 +1,90 @@
+# ==============================================================================
+# AXON MASTER GITIGNORE - .NET 10 / AVALONIA / SQLCIPHER / NATIVE AOT
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Standard .NET / Visual Studio / JetBrains
+# ------------------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+out/
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ------------------------------------------------------------------------------
+# Native AOT & Compilation Artifacts
+# ------------------------------------------------------------------------------
+# AOT produces large intermediate files and platform-specific binaries
+*.pdb
+*.vshost.*
+*.vshost.*.manifest
+*.xml
+# Ignore AOT publish directories
+publish/
+# CoreCLR/NativeAOT symbols
+*.dbg
+*.symbols
+
+# ------------------------------------------------------------------------------
+# Axon Persistence (SQLCipher & Encryption)
+# ------------------------------------------------------------------------------
+# NEVER commit the actual biometric databases
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Ignore Hardware/Mock Keys (Phase 1 logic)
+# If you store mock keys in a folder for dev, ignore them here
+src/Axon.Infrastructure/Persistence/Keys/*.bin
+src/Axon.Infrastructure/Persistence/Keys/*.key
+
+# ------------------------------------------------------------------------------
+# Mobile Specific (Avalonia / Android / iOS)
+# ------------------------------------------------------------------------------
+# Android
+*.apk
+*.aab
+*.dex
+# iOS / macOS
+[Dd]erived[Dd]ata/
+*.ipa
+*.app
+*.framework
+*.dSYM
+.plastic/
+
+# ------------------------------------------------------------------------------
+# gRPC & Protobuf
+# ------------------------------------------------------------------------------
+# Ignore generated code from Protobuf (should be generated on build)
+src/Axon.Sync/Generated/
+*.pb.cs
+
+# ------------------------------------------------------------------------------
+# ML.NET & Analytics
+# ------------------------------------------------------------------------------
+# Ignore locally trained models (Phase 2)
+*.zip
+*.onnx
+# Unless you want to version control specific base models, keep them out
+# src/Axon.Infrastructure/ML/Models/Trained/
+
+# ------------------------------------------------------------------------------
+# OS / Environment
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.env
+.env.*
+!.env.example

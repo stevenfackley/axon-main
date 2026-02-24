@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    iOS / iPadOS HealthKit Entitlements
+    ====================================
+    Required for 2026 App Store submission.
+    Docs: https://developer.apple.com/documentation/healthkit/setting_up_healthkit
+
+    Usage summary strings MUST be added to Info.plist before submission:
+        NSHealthShareUsageDescription  – "Axon reads biometric data to provide unified analytics."
+        NSHealthUpdateUsageDescription – "Axon writes synthesised recovery scores to Health."
+
+    Background delivery is declared here to enable wearable sync while the app
+    is in the background (HKObserverQuery push notifications from HealthKit).
+-->
+<plist version="1.0">
+<dict>
+
+    <!-- ── Core HealthKit access ──────────────────────────────────────────── -->
+    <key>com.apple.developer.healthkit</key>
+    <true/>
+
+    <!-- ── Background data delivery (wearable push sync) ─────────────────── -->
+    <key>com.apple.developer.healthkit.background-delivery</key>
+    <true/>
+
+    <!-- ── Read access: all types Axon ingests ────────────────────────────── -->
+    <key>com.apple.developer.healthkit.access</key>
+    <array>
+        <!-- Cardiovascular -->
+        <string>HKQuantityTypeIdentifierHeartRate</string>
+        <string>HKQuantityTypeIdentifierHeartRateVariabilitySDNN</string>
+        <string>HKQuantityTypeIdentifierRestingHeartRate</string>
+
+        <!-- Respiratory -->
+        <string>HKQuantityTypeIdentifierRespiratoryRate</string>
+        <string>HKQuantityTypeIdentifierOxygenSaturation</string>
+
+        <!-- Sleep -->
+        <string>HKCategoryTypeIdentifierSleepAnalysis</string>
+
+        <!-- Activity & Performance -->
+        <string>HKQuantityTypeIdentifierStepCount</string>
+        <string>HKQuantityTypeIdentifierActiveEnergyBurned</string>
+        <string>HKQuantityTypeIdentifierBasalEnergyBurned</string>
+        <string>HKQuantityTypeIdentifierVO2Max</string>
+        <string>HKQuantityTypeIdentifierCyclingPower</string>
+
+        <!-- Body Composition -->
+        <string>HKQuantityTypeIdentifierBodyMass</string>
+        <string>HKQuantityTypeIdentifierBodyFatPercentage</string>
+        <string>HKQuantityTypeIdentifierLeanBodyMass</string>
+
+        <!-- Thermoregulation -->
+        <string>HKQuantityTypeIdentifierBodyTemperature</string>
+
+        <!-- Metabolic / Blood -->
+        <string>HKQuantityTypeIdentifierBloodGlucose</string>
+        <string>HKQuantityTypeIdentifierBloodPressureSystolic</string>
+        <string>HKQuantityTypeIdentifierBloodPressureDiastolic</string>
+    </array>
+
+    <!-- ── Write access: Axon-synthesised data back to Health ─────────────── -->
+    <!-- Intentionally minimal: only push recovery/readiness scores back -->
+    <key>com.apple.developer.healthkit.write</key>
+    <array>
+        <!-- Recovery score stored as mindful session proxy if no native type exists -->
+        <string>HKCategoryTypeIdentifierMindfulSession</string>
+    </array>
+
+</dict>
+</plist>

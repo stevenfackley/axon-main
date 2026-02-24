@@ -1,0 +1,66 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Desktop target; Android added below as a multi-TFM build -->
+    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <Optimize>true</Optimize>
+    <!-- AOT only on desktop; Android uses its own AOT pipeline via the workload -->
+    <PublishAot Condition="'$(TargetFramework)' == 'net9.0'">true</PublishAot>
+    <!-- Desktop produces a console/windowed exe; Android produces an APK -->
+    <OutputType Condition="'$(TargetFramework)' == 'net9.0'">WinExe</OutputType>
+    <OutputType Condition="$(TargetFramework.Contains('android'))">Exe</OutputType>
+    <AssemblyName>Axon.UI</AssemblyName>
+    <RootNamespace>Axon.UI</RootNamespace>
+
+    <!-- App Store metadata placeholders -->
+    <ApplicationId>com.axon.telemetry</ApplicationId>
+    <!-- ApplicationVersion = Android versionCode (must be integer) -->
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
+
+    <!-- iOS HealthKit entitlements wired at build time -->
+    <CodesignEntitlements>Entitlements\iOS\Entitlements.plist</CodesignEntitlements>
+
+    <!-- Android Health Connect permissions wired via manifest -->
+    <AndroidManifestPlaceholders>healthConnectPermission=true</AndroidManifestPlaceholders>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axon.Core\Axon.Core.csproj" />
+    <ProjectReference Include="..\Axon.Infrastructure\Axon.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Avalonia UI core (all targets) -->
+    <PackageReference Include="Avalonia" Version="11.*" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.*" />
+    <PackageReference Include="Avalonia.Skia" Version="11.*" />
+    <!-- SkiaSharp for direct GPU canvas access in custom render controls -->
+    <PackageReference Include="SkiaSharp" Version="2.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
+  </ItemGroup>
+
+  <!-- Desktop-only backend -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Avalonia.Desktop" Version="11.*" />
+  </ItemGroup>
+
+  <!-- Android backend -->
+  <ItemGroup Condition="$(TargetFramework.Contains('android'))">
+    <PackageReference Include="Avalonia.Android" Version="11.*" />
+  </ItemGroup>
+
+  <!-- iOS HealthKit entitlement file -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <BundleResource Include="Entitlements\iOS\Entitlements.plist" />
+  </ItemGroup>
+
+  <!-- Android Health Connect manifest merge -->
+  <ItemGroup Condition="$(TargetFramework.Contains('android'))">
+    <AndroidManifest Include="Entitlements\Android\AndroidManifest.xml" />
+  </ItemGroup>
+
+</Project>

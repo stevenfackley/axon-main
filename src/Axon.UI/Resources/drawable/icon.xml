@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal placeholder launcher icon for development builds.
+     Replace with a proper mipmap set before Play Store submission. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+    <solid android:color="#FF1A1A2E" />
+</shape>
