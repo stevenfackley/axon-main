@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true   # Air-gap principle: no MS telemetry in CI either
+  DOTNET_NOLOGO: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: Build & Test
+  # ─────────────────────────────────────────────────────────────
+  build-and-test:
+    name: Build & Test (.NET 10)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore Axon.sln
+
+      - name: Build (treat warnings as errors)
+        run: dotnet build Axon.sln --no-restore -c Release /p:TreatWarningsAsErrors=true
+
+      - name: Run tests
+        run: dotnet test Axon.sln --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/*.trx"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: "**/coverage.cobertura.xml"
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: Native AOT Compatibility Check
+  # ─────────────────────────────────────────────────────────────
+  aot-publish:
+    name: Native AOT Publish (win-x64)
+    runs-on: windows-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Axon.sln
+
+      - name: AOT Publish — Axon.Core
+        run: dotnet publish src/Axon.Core/Axon.Core.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
+
+      - name: AOT Publish — Axon.Infrastructure
+        run: dotnet publish src/Axon.Infrastructure/Axon.Infrastructure.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
+
+      - name: AOT Publish — Axon.UI
+        run: dotnet publish src/Axon.UI/Axon.UI.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
+
+      - name: Upload AOT binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: axon-win-x64-aot
+          path: src/Axon.UI/bin/Release/net10.0/win-x64/publish/
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 3: Dependency Audit (no cloud / telemetry SDKs)
+  # ─────────────────────────────────────────────────────────────
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Axon.sln
+
+      - name: Check for known vulnerabilities
+        run: dotnet list Axon.sln package --vulnerable --include-transitive
+
+      - name: Verify no telemetry packages
+        shell: bash
+        run: |
+          BANNED="ApplicationInsights|Sentry|Segment|Mixpanel|Datadog|NewRelic|Raygun|Rollbar|Bugsnag|HockeyApp|AppCenter|GoogleAnalytics"
+          echo "Scanning for banned telemetry packages..."
+          if grep -rEi "$BANNED" src/ --include="*.csproj"; then
+            echo "❌ FAIL: Banned telemetry/analytics package detected. Axon is zero-knowledge — no phone-home SDKs allowed."
+            exit 1
+          else
+            echo "✅ PASS: No telemetry packages found."
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 4: Architecture Boundary Enforcement
+  # ─────────────────────────────────────────────────────────────
+  architecture-check:
+    name: Architecture Boundary Check
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Axon.Core has no Infrastructure/UI references
+        shell: bash
+        run: |
+          echo "Checking Axon.Core.csproj for forbidden references..."
+          if grep -i "Axon.Infrastructure\|Axon.UI" src/Axon.Core/Axon.Core.csproj; then
+            echo "❌ FAIL: Axon.Core must not reference Axon.Infrastructure or Axon.UI."
+            exit 1
+          else
+            echo "✅ PASS: Axon.Core boundary is clean."
+          fi
+
+      - name: Verify no hardcoded keys or connection strings in Core
+        shell: bash
+        run: |
+          echo "Scanning Axon.Core for hardcoded secrets..."
+          if grep -rEi "password\s*=|key\s*=|secret\s*=|connectionstring\s*=" src/Axon.Core/ --include="*.cs"; then
+            echo "❌ FAIL: Potential hardcoded secret detected in Axon.Core."
+            exit 1
+          else
+            echo "✅ PASS: No hardcoded secrets found in Core."
+          fi
