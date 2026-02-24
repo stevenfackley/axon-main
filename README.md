@@ -1,6 +1,5 @@
 <div align="center">
 
-<img src="docs/diagrams/architecture/system-architecture.png" alt="Axon Architecture" width="800"/>
 
 # 🧬 Axon
 
@@ -55,6 +54,7 @@ Axon is built on a **Hexagonal (Ports and Adapters)** architecture. The core bio
 │  SQLite/SQLCipher · Whoop · Garmin · Oura · gRPC Outbox    │
 └────────────────────────────────────────────────────────────┘
 ```
+<img src="docs/diagrams/architecture/system-architecture.png" alt="Axon Architecture" width="800"/>
 
 ### Solution Layout
 
