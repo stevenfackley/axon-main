@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Axon iOS App Bundle Configuration (Info.plist)
+    ================================================
+    Required for App Store Connect submission.
+    Docs: https://developer.apple.com/documentation/bundleresources/information_property_list
+
+    BEFORE SUBMITTING:
+      1. Replace YOUR_TEAM_ID with your Apple Developer Team ID.
+      2. Verify CFBundleShortVersionString matches the release tag.
+      3. Increment CFBundleVersion (integer) with every build submitted to TestFlight/App Store.
+      4. Add any additional NSUsageDescription strings for new permissions.
+-->
+<plist version="1.0">
+<dict>
+
+    <!-- ── Bundle Identity ────────────────────────────────────────────────── -->
+    <key>CFBundleIdentifier</key>
+    <string>com.axon.telemetry</string>
+
+    <key>CFBundleName</key>
+    <string>Axon</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Axon</string>
+
+    <key>CFBundleExecutable</key>
+    <string>Axon</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <!-- ── Versioning ─────────────────────────────────────────────────────── -->
+    <!--
+        CFBundleShortVersionString: marketing version shown to users ("1.0.0")
+        CFBundleVersion:            build number sent to App Store Connect (integer string)
+    -->
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- ── Minimum OS & Device Support ───────────────────────────────────── -->
+    <key>MinimumOSVersion</key>
+    <string>16.0</string>
+
+    <!--
+        iPhone + iPad supported (Avalonia renders correctly on both).
+        Remove iPad entries if you choose iPhone-only.
+    -->
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>  <!-- iPhone -->
+        <integer>2</integer>  <!-- iPad   -->
+    </array>
+
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
+
+    <!-- ── Orientation ────────────────────────────────────────────────────── -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- ── Launch UI ──────────────────────────────────────────────────────── -->
+    <!--
+        Avalonia renders programmatically into a full-screen metal view.
+        A launch storyboard is still required by App Store guidelines
+        to prevent a black flash on cold start.
+        Create LaunchScreen.storyboard in Xcode and add it to the project.
+    -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+
+    <!-- ── Status Bar ─────────────────────────────────────────────────────── -->
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleLightContent</string>
+
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+
+    <!-- ── Background Modes ───────────────────────────────────────────────── -->
+    <!--
+        "fetch"      → enables silent background refresh for wearable API polling.
+        "processing" → enables BGProcessingTask for long-running ML inference.
+        Remove these if background sync is not needed in the initial release.
+    -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.axon.telemetry.sync</string>
+        <string>com.axon.telemetry.ml.inference</string>
+    </array>
+
+    <!-- ── Privacy Usage Descriptions (REQUIRED by App Store Review) ─────── -->
+    <!--
+        Any permission not accompanied by a usage string will cause App Store
+        rejection. All strings must accurately describe Axon's offline-first,
+        zero-knowledge usage model.
+    -->
+
+    <!-- HealthKit: read biometric data -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>Axon reads your biometric data from Apple Health (heart rate, HRV, sleep, activity, and more) to provide a unified, fully offline analytics dashboard. All data is stored locally on your device and is never uploaded to any server.</string>
+
+    <!-- HealthKit: write synthesised data back -->
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Axon writes synthesised recovery and readiness scores back to Apple Health so they are available to other apps in your health ecosystem.</string>
+
+    <!-- Face ID / biometric authentication for Secure Enclave key access -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>Axon uses Face ID to protect access to your encrypted biometric vault. Your health data is secured by the device Secure Enclave and requires biometric confirmation to unlock.</string>
+
+    <!-- Local Network (gRPC Sovereign Sync with desktop Power Station) -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Axon uses your local Wi-Fi network to sync data with the Axon desktop Power Station app. No data is sent to external servers. The sync is peer-to-peer and zero-knowledge encrypted.</string>
+
+    <!-- ── App Transport Security ──────────────────────────────────────────── -->
+    <!--
+        Axon is offline-first and air-gapped by design.
+        Only localhost gRPC connections are permitted.
+        Disabling NSAllowsArbitraryLoads intentionally hardens the security posture.
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <!-- gRPC Sovereign Sync to local Power Station over LAN -->
+            <key>localhost</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <false/>
+                <key>NSIncludesSubdomains</key>
+                <false/>
+            </dict>
+        </dict>
+    </dict>
+
+    <!-- ── ITSAppUsesNonExemptEncryption ──────────────────────────────────── -->
+    <!--
+        Axon uses AES-256 (SQLCipher) to encrypt the biometric database.
+        This is standard encryption and qualifies for the Encryption Export
+        Administration Regulations (EAR) exemption under Category 5 Part 2.
+        Set to true and add the ERN number after Apple compliance review.
+        See: https://developer.apple.com/documentation/security/complying_with_encryption_export_regulations
+    -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <true/>
+
+</dict>
+</plist>

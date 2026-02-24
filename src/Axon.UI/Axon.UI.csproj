@@ -1,17 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Desktop target; Android added below as a multi-TFM build -->
-    <TargetFrameworks>net9.0;net9.0-android</TargetFrameworks>
+    <!-- Desktop + Android + iOS Satellite app (multi-TFM build) -->
+    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <Optimize>true</Optimize>
     <!-- AOT only on desktop; Android uses its own AOT pipeline via the workload -->
     <PublishAot Condition="'$(TargetFramework)' == 'net9.0'">true</PublishAot>
-    <!-- Desktop produces a console/windowed exe; Android produces an APK -->
+    <!-- Desktop produces a windowed exe; mobile produces APK / IPA -->
     <OutputType Condition="'$(TargetFramework)' == 'net9.0'">WinExe</OutputType>
     <OutputType Condition="$(TargetFramework.Contains('android'))">Exe</OutputType>
+    <OutputType Condition="$(TargetFramework.Contains('ios'))">Exe</OutputType>
     <AssemblyName>Axon.UI</AssemblyName>
     <RootNamespace>Axon.UI</RootNamespace>
 
@@ -51,6 +52,11 @@
   <!-- Android backend -->
   <ItemGroup Condition="$(TargetFramework.Contains('android'))">
     <PackageReference Include="Avalonia.Android" Version="11.*" />
+  </ItemGroup>
+
+  <!-- iOS backend -->
+  <ItemGroup Condition="$(TargetFramework.Contains('ios'))">
+    <PackageReference Include="Avalonia.iOS" Version="11.*" />
   </ItemGroup>
 
   <!-- iOS HealthKit entitlement file -->
