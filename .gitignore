@@ -96,3 +96,6 @@ desktop.ini
 node_modules/
 package.json
 package-lock.json
+
+# Windows NTFS alternate-data-stream Zone.Identifier files (colon form on Linux)
+*:Zone.Identifier
