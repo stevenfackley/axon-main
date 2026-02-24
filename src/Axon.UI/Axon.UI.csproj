@@ -3,15 +3,11 @@
   <PropertyGroup>
     <!--
       TargetFrameworks is OS-gated at MSBuild evaluation time:
-        • Linux (WSL)  → net10.0 only   (iOS workload requires macOS+Xcode; Android
-                                          workload is omitted by default to keep WSL
-                                          builds fast — add net10.0-android here if
-                                          the Android workload is installed in your
-                                          WSL environment)
+        • Linux (WSL)   → net10.0 + Android  (Android workload installed, iOS requires macOS+Xcode)
         • Windows      → net10.0 + Android  (iOS still requires macOS)
         • macOS        → all three targets
     -->
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net10.0;net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0;net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
 
