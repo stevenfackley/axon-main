@@ -274,7 +274,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure policy.
 - [ ] Android Satellite app
 - [ ] iOS Satellite app
 - [ ] Windows Store MSIX packaging
-- [ ] Freemium / Axon Pro licensing gate
+- [ ] Freemium / Axon Pro licensing gate ($4.99/mo · $39.99/yr · $79.99 launch lifetime)
 
 ---
 

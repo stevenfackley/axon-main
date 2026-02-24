@@ -81,8 +81,39 @@ The design language is **Industrial-Technical**. It prioritizes high-density dat
 
 ## 6. Monetization Architecture
 
-* **Freemium Model:** * **Free:** Local manual import, 1-year history, basic visualization.
-* **Axon Pro ($149 One-Time or $9/mo):** Automated API sync, unlimited history, ML.NET insight engine, and cross-platform "Sovereign Sync."
+### Model: Freemium → Subscription / Annual
+
+Axon uses a freemium funnel targeting high-performance athletes and bio-hackers who already pay for multiple wearable subscriptions and are privacy-conscious. Pricing is positioned below direct competitors (Training Peaks at $19.99/mo, Whoop at $30/mo) while delivering more depth than cheaper alternatives (Athlytic at $3.33/mo, HRV4Training at $9.99 one-time).
+
+| Tier | Price | Features |
+| --- | --- | --- |
+| **Free** | $0 | Manual CSV/JSON import, 1-year history, basic single-source visualization, local storage only |
+| **Axon Pro** | **$4.99/mo** or **$39.99/yr** | Automated API sync (Whoop, Garmin, Oura), unlimited history, ML.NET Insight Engine (anomaly detection, recovery forecasting, correlation lab), cross-platform Sovereign Sync, comparative overlays |
+
+### Pricing Rationale
+
+* **$4.99/month** is an impulse-buy for the target demographic, who already spend $30–$300/month on wearable hardware and subscriptions. Conversion friction is low.
+* **$39.99/year (~$3.33/month)** rewards commitment and improves LTV predictability. The annual discount encourages early lock-in.
+* A **$79.99 lifetime deal** may be offered as a time-limited launch promotion to seed the initial user base and generate word-of-mouth in quantified-self communities (Reddit, Discord, X). This should be retired once the product reaches 500+ reviews.
+
+### Scale Path
+
+After establishing brand trust and accumulating App Store reviews (target: 6–12 months post-launch), pricing will be adjusted:
+
+* **$6.99/month** or **$59.99/year** for new subscribers.
+* Existing subscribers grandfathered at their original rate.
+
+### Competitive Positioning
+
+| Competitor | Price | Offline | Cross-Device | Local AI |
+| --- | --- | --- | --- | --- |
+| Training Peaks | $19.99/mo | ❌ | ✅ | ❌ |
+| Exist.io | $6-8/mo | ❌ | ✅ | ❌ |
+| Athlytic | $3.33/mo | ✅ | ❌ | Limited |
+| HRV4Training | $9.99 OTP | ✅ | ❌ | ❌ |
+| **Axon Pro** | **$4.99/mo** | ✅ | ✅ | ✅ |
+
+Axon's unique position: the **only** cross-wearable, fully offline, AI-enabled analytics tool in this category at this price point.
 
 
 
