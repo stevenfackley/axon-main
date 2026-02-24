@@ -1,21 +1,66 @@
-MIT License
+PROPRIETARY SOFTWARE LICENSE
 
-Copyright (c) 2026 Steven Ackley
+Copyright (c) 2026 Steven Ackley. All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+NOTICE: This software and its source code ("Axon") are the exclusive
+intellectual property of Steven Ackley ("Author"). All rights are reserved.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+================================================================================
+GRANT OF LICENSE
+================================================================================
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+The Author grants you a limited, non-exclusive, non-transferable,
+non-sublicensable license to:
+
+  (a) Use the compiled binary form of Axon for personal, non-commercial purposes
+      on devices you own or control.
+  (b) View this source code for educational and personal reference purposes only.
+
+================================================================================
+RESTRICTIONS
+================================================================================
+
+You may NOT, without the Author's prior written consent:
+
+  1. Copy, reproduce, distribute, or publish this source code or any portion
+     thereof in any form.
+  2. Modify, adapt, translate, reverse-engineer, decompile, or create derivative
+     works based on this software.
+  3. Sell, sublicense, rent, lease, or otherwise transfer rights to this software
+     or its source code.
+  4. Use this software or any portion of it in any commercial product or service,
+     including competing applications.
+  5. Remove or alter any proprietary notices, labels, or marks on the software.
+  6. Use the name "Axon," the project branding, or the Author's name to endorse
+     or promote products derived from this software without prior written
+     permission.
+
+================================================================================
+COMMERCIAL LICENSING
+================================================================================
+
+Commercial use, redistribution, white-labeling, or incorporation of Axon's
+source code into other products requires a separate commercial license agreement.
+
+To inquire about commercial licensing, contact the Author via GitHub:
+https://github.com/stevenfackley
+
+================================================================================
+DISCLAIMER OF WARRANTIES
+================================================================================
+
+THIS SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM YOUR
+USE OF THIS SOFTWARE.
+
+================================================================================
+HEALTH DATA DISCLAIMER
+================================================================================
+
+Axon is a personal data aggregation tool and is NOT a medical device. It is NOT
+intended to diagnose, treat, cure, or prevent any disease or medical condition.
+Data displayed in Axon should not be used as a substitute for professional
+medical advice, diagnosis, or treatment. Always consult a qualified healthcare
+provider with questions you may have regarding a medical condition.

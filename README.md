@@ -8,7 +8,7 @@
 [![Build Status](https://github.com/stevenfackley/axon-main/actions/workflows/ci.yml/badge.svg)](https://github.com/stevenfackley/axon-main/actions/workflows/ci.yml)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0_Native_AOT-512BD4?logo=dotnet)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20iOS%20%7C%20Android-blue)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 *A high-performance, offline-first telemetry engine that unifies Whoop, Garmin, and Oura data into a zero-knowledge, GPU-accelerated dashboard. No cloud. No subscriptions. Total data sovereignty.*
@@ -292,7 +292,8 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for th
 
 ## 📄 License
 
-Axon is released under the [MIT License](LICENSE).
+Axon is proprietary software. See [LICENSE](LICENSE) for full terms.  
+© 2026 Steven Ackley. All Rights Reserved.
 
 ---
 
