@@ -1,8 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Target net9.0 until .NET 10 SDK is installed; bump to net10.0 then -->
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
@@ -19,18 +18,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- EF Core 9 (tracks net10 on release); pin to latest stable -->
+    <!-- EF Core; pin to latest stable -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.*" />
     <!-- SQLCipher encrypted SQLite provider -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
-    <PackageReference Include="System.Text.Json" Version="9.*" />
     <!-- ML.NET: core + time-series catalog for IID Spike + SSA Forecasting -->
     <!-- Note: ML.NET uses dynamic code generation internally; PublishAot is set to
          false for inference-heavy builds. For strict AOT targets use ONNX export. -->
     <PackageReference Include="Microsoft.ML" Version="3.*" />
     <PackageReference Include="Microsoft.ML.TimeSeries" Version="3.*" />
   </ItemGroup>
+
+  <!--
+    System.Text.Json is inbox in .NET 10 — no explicit PackageReference needed.
+  -->
 
 </Project>
