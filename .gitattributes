@@ -1,0 +1,23 @@
+# Enforce LF line endings for all text files in the repository.
+# This prevents CRLF/LF conflicts when switching between Windows and WSL.
+* text=auto eol=lf
+
+# Explicitly mark binary files so git never mangles them.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+
+# Shader source — treat as text with LF
+*.sksl text eol=lf
+
+# XML / AXAML / PLIST — text
+*.xml   text eol=lf
+*.axaml text eol=lf
+*.plist text eol=lf

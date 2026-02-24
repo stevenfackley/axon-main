@@ -88,3 +88,11 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+# Windows Zone.Identifier sidecar files (created when downloading files on Windows)
+*.Zone.Identifier
+
+# Node / MCP tooling (not part of the .NET project)
+node_modules/
+package.json
+package-lock.json
