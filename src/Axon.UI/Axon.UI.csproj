@@ -1,18 +1,39 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Desktop + Android + iOS Satellite app (multi-TFM build) -->
-    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
+    <!--
+      TargetFrameworks is OS-gated at MSBuild evaluation time:
+        • Linux (WSL)  → net10.0 only   (iOS workload requires macOS+Xcode; Android
+                                          workload is omitted by default to keep WSL
+                                          builds fast — add net10.0-android here if
+                                          the Android workload is installed in your
+                                          WSL environment)
+        • Windows      → net10.0 + Android  (iOS still requires macOS)
+        • macOS        → all three targets
+    -->
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
+
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <Optimize>true</Optimize>
+
     <!-- AOT only on desktop; Android uses its own AOT pipeline via the workload -->
-    <PublishAot Condition="'$(TargetFramework)' == 'net9.0'">true</PublishAot>
-    <!-- Desktop produces a windowed exe; mobile produces APK / IPA -->
-    <OutputType Condition="'$(TargetFramework)' == 'net9.0'">WinExe</OutputType>
+    <PublishAot Condition="'$(TargetFramework)' == 'net10.0'">true</PublishAot>
+
+    <!--
+      OutputType for the desktop TFM:
+        • Windows → WinExe  (hides the console window via PE subsystem flag)
+        • Linux / macOS → Exe  (WinExe is meaningless and may cause linker warnings)
+    -->
+    <OutputType Condition="'$(TargetFramework)' == 'net10.0' AND $([MSBuild]::IsOSPlatform('windows'))">WinExe</OutputType>
+    <OutputType Condition="'$(TargetFramework)' == 'net10.0' AND !$([MSBuild]::IsOSPlatform('windows'))">Exe</OutputType>
+    <!-- Mobile targets always produce an executable entry point -->
     <OutputType Condition="$(TargetFramework.Contains('android'))">Exe</OutputType>
     <OutputType Condition="$(TargetFramework.Contains('ios'))">Exe</OutputType>
+
     <AssemblyName>Axon.UI</AssemblyName>
     <RootNamespace>Axon.UI</RootNamespace>
 
@@ -22,8 +43,11 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
 
-    <!-- iOS HealthKit entitlements wired at build time -->
-    <CodesignEntitlements>Entitlements\iOS\Entitlements.plist</CodesignEntitlements>
+    <!--
+      iOS HealthKit entitlements — only evaluated on macOS where the iOS workload
+      is available. Forward slashes are used so the path resolves on all OSes.
+    -->
+    <CodesignEntitlements Condition="$([MSBuild]::IsOSPlatform('osx'))">Entitlements/iOS/Entitlements.plist</CodesignEntitlements>
 
     <!-- Android Health Connect permissions wired via manifest -->
     <AndroidManifestPlaceholders>healthConnectPermission=true</AndroidManifestPlaceholders>
@@ -45,7 +69,7 @@
   </ItemGroup>
 
   <!-- Desktop-only backend -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Avalonia.Desktop" Version="11.*" />
   </ItemGroup>
 
@@ -59,14 +83,14 @@
     <PackageReference Include="Avalonia.iOS" Version="11.*" />
   </ItemGroup>
 
-  <!-- iOS HealthKit entitlement file -->
+  <!-- iOS HealthKit entitlement file — forward slash path works on all host OSes -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
-    <BundleResource Include="Entitlements\iOS\Entitlements.plist" />
+    <BundleResource Include="Entitlements/iOS/Entitlements.plist" />
   </ItemGroup>
 
-  <!-- Android Health Connect manifest merge -->
+  <!-- Android Health Connect manifest merge — forward slash path -->
   <ItemGroup Condition="$(TargetFramework.Contains('android'))">
-    <AndroidManifest Include="Entitlements\Android\AndroidManifest.xml" />
+    <AndroidManifest Include="Entitlements/Android/AndroidManifest.xml" />
   </ItemGroup>
 
 </Project>
