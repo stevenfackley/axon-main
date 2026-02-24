@@ -27,7 +27,7 @@ echo [INFO] Using Android SDK: %ANDROID_HOME%
 
 set ADB=%ANDROID_HOME%\platform-tools\adb.exe
 set EMULATOR=%ANDROID_HOME%\emulator\emulator.exe
-set APK=src\Axon.UI\bin\%CONFIG%\net9.0-android\com.axon.telemetry-Signed.apk
+set APK=src\Axon.UI\bin\%CONFIG%\net10.0-android\com.axon.telemetry-Signed.apk
 set PROJECT=src\Axon.UI\Axon.UI.csproj
 
 :: ── 1. Start emulator if no device is attached ───────────────
@@ -55,7 +55,7 @@ if defined DEVICE (
 :: ── 2. Ensure Android SDK platforms are installed ─────────────
 echo.
 echo [STEP 2/5] Ensuring Android SDK dependencies (android.jar, build-tools)...
-dotnet build "%PROJECT%" -f net9.0-android -t:InstallAndroidDependencies ^
+dotnet build "%PROJECT%" -f net10.0-android -t:InstallAndroidDependencies ^
     -p:AndroidSdkDirectory="%ANDROID_HOME%" ^
     -p:AcceptAndroidSDKLicenses=True ^
     --nologo -v:q
@@ -66,8 +66,8 @@ echo [INFO] SDK dependencies checked.
 
 :: ── 3. Build ─────────────────────────────────────────────────
 echo.
-echo [STEP 3/5] Building Axon.UI (%CONFIG%) for net9.0-android...
-dotnet publish "%PROJECT%" -f net9.0-android -c %CONFIG%
+echo [STEP 3/5] Building Axon.UI (%CONFIG%) for net10.0-android...
+dotnet publish "%PROJECT%" -f net10.0-android -c %CONFIG%
 if errorlevel 1 (
     echo [ERROR] Build failed. See output above.
     exit /b 1
