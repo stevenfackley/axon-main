@@ -21,7 +21,7 @@
 #        echo no | avdmanager create avd --name axon_dev \
 #          --abi google_apis/x86_64 \
 #          --package "system-images;android-36;google_apis;x86_64" \
-#          --device "pixel_6"
+#          --device "pixel_9"
 #    • KVM (WSL2 — verify with: ls /dev/kvm)
 # =============================================================
 set -euo pipefail

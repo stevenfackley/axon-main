@@ -41,7 +41,7 @@ Builds, signs, and side-loads the Axon Android app onto an emulator or physical 
 
 ```cmd
 build\build-android.cmd
-build\build-android.cmd Release Pixel_7_API_34
+build\build-android.cmd Release Pixel_9_API_36_x86_64
 ```
 
 **Prerequisites:**
@@ -92,7 +92,7 @@ echo no | avdmanager create avd \
   --name axon_dev \
   --abi google_apis/x86_64 \
   --package "system-images;android-36;google_apis;x86_64" \
-  --device "pixel_6"
+  --device "pixel_9"
 ```
 
 **KVM acceleration (required for WSL2):**

@@ -4,14 +4,14 @@ setlocal EnableDelayedExpansion
 :: ============================================================
 ::  Axon – Android Build & Deploy Script
 ::  Usage:  build-android.cmd [Release|Debug]  [avd-name]
-::  Defaults: Debug  /  Pixel_3a_API_33_x86_64
+::  Defaults: Debug  /  Pixel_9_API_36_x86_64
 :: ============================================================
 
 set CONFIG=%~1
 if "%CONFIG%"=="" set CONFIG=Debug
 
 set AVD=%~2
-if "%AVD%"=="" set AVD=Pixel_3a_API_33_x86_64
+if "%AVD%"=="" set AVD=Pixel_9_API_36_x86_64
 
 :: ── Locate Android SDK ────────────────────────────────────────
 if defined ANDROID_HOME goto :sdk_found
