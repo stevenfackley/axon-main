@@ -3,17 +3,17 @@
 
 # 🧬 Axon
 
-![.NET](https://img.shields.io/badge/.NET-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
-![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=c-sharp&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-512BD4?style=for-the-badge&logo=dotnet&logoColor=white) ![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=c-sharp&logoColor=white)
+
 
 
 **The Sovereign Biometric Vault**
 
 [![Build Status](https://github.com/stevenfackley/axon-main/actions/workflows/ci.yml/badge.svg)](https://github.com/stevenfackley/axon-main/actions/workflows/ci.yml)
-[![.NET 10](https://img.shields.io/badge/.NET-10.0_Native_AOT-512BD4?logo=dotnet)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20iOS%20%7C%20Android-blue)](#)
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
+[](#)
+[](LICENSE)
+[](CONTRIBUTING.md)
 
 *A high-performance, offline-first telemetry engine that unifies Whoop, Garmin, and Oura data into a zero-knowledge, GPU-accelerated dashboard. No cloud. No subscriptions. Total data sovereignty.*
 
