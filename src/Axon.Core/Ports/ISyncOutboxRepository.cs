@@ -23,6 +23,9 @@ public interface ISyncOutboxRepository : IRepository<SyncOutboxEntry, Guid>
         int batchSize = 100,
         CancellationToken ct = default);
 
+    /// <summary>Returns the current number of unprocessed outbox entries.</summary>
+    ValueTask<int> CountPendingAsync(CancellationToken ct = default);
+
     /// <summary>Stamps <see cref="SyncOutboxEntry.ProcessedAt"/> with UTC now.</summary>
     ValueTask MarkProcessedAsync(Guid entryId, CancellationToken ct = default);
 

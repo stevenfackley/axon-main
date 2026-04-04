@@ -72,6 +72,11 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
         return result;
     }
 
+    public ValueTask<int> CountPendingAsync(CancellationToken ct = default) =>
+        new(db.SyncOutbox
+            .AsNoTracking()
+            .CountAsync(e => e.ProcessedAtUnixMs == null, ct));
+
     public async ValueTask MarkProcessedAsync(Guid entryId, CancellationToken ct = default)
     {
         long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
