@@ -72,8 +72,15 @@ public sealed class App : AvaloniaApp
             new StreamedChartSeriesStrategy(TimeSpan.FromDays(30), threshold: 2048),
             new AggregateChartSeriesStrategy(threshold: 2048));
 
+        var analysisFacade = new AnalysisLabFacade(
+            biometricRepository,
+            new IntradayAnalysisBucketStrategy(TimeSpan.FromDays(7)),
+            new DailyAnalysisBucketStrategy(TimeSpan.FromDays(45), 60 * 60 * 6, "6-hour buckets"),
+            new DailyAnalysisBucketStrategy(TimeSpan.MaxValue, 60 * 60 * 24, "1-day buckets"));
+
         var dashboard = new DashboardViewModel(dashboardFacade);
-        var mainWindow = new MainWindowViewModel(dashboard, syncOutboxRepository);
+        var analysisLab = new AnalysisLabViewModel(analysisFacade);
+        var mainWindow = new MainWindowViewModel(dashboard, analysisLab, syncOutboxRepository);
 
         return new AppRuntime(mainWindow, inferenceService, db);
     }

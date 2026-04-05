@@ -40,6 +40,18 @@
                                LetterSpacing="3" />
                 </StackPanel>
 
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            Spacing="10">
+                    <Button Content="Dashboard"
+                            Command="{Binding ShowDashboardCommand}" />
+                    <Button Content="Analysis Lab"
+                            Command="{Binding ShowAnalysisLabCommand}" />
+                    <Button Content="Settings"
+                            Command="{Binding ShowSettingsCommand}" />
+                </StackPanel>
+
                 <!-- Sync status indicator -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 
@@ -81,8 +93,14 @@
             DataContext is explicitly forwarded to Dashboard so MainView's
             x:DataType="vm:DashboardViewModel" compiled binding resolves correctly.
         -->
-        <views:MainView Grid.Row="1"
-                        DataContext="{Binding Dashboard}" />
+        <Grid Grid.Row="1">
+            <views:MainView IsVisible="{Binding IsDashboardActive}"
+                            DataContext="{Binding Dashboard}" />
+            <views:AnalysisLabView IsVisible="{Binding IsAnalysisLabActive}"
+                                   DataContext="{Binding AnalysisLab}" />
+            <views:SettingsView IsVisible="{Binding IsSettingsActive}"
+                                DataContext="{Binding Settings}" />
+        </Grid>
 
     </Grid>
 </Window>

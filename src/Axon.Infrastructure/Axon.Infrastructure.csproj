@@ -35,4 +35,15 @@
     System.Text.Json is inbox in .NET 10 — no explicit PackageReference needed.
   -->
 
+  <Target Name="FilterBrokenSqlCipherBrowserWasmAsset" AfterTargets="ResolveReferences">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)"
+                               Condition="$([System.String]::Copy('%(ReferenceCopyLocalPaths.Identity)').Contains('sqlitepclraw.lib.e_sqlcipher')) and $([System.String]::Copy('%(ReferenceCopyLocalPaths.Identity)').Contains('browser-wasm'))" />
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)"
+                                    Condition="$([System.String]::Copy('%(RuntimeTargetsCopyLocalItems.Identity)').Contains('sqlitepclraw.lib.e_sqlcipher')) and $([System.String]::Copy('%(RuntimeTargetsCopyLocalItems.Identity)').Contains('browser-wasm'))" />
+      <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)"
+                            Condition="$([System.String]::Copy('%(NativeCopyLocalItems.Identity)').Contains('sqlitepclraw.lib.e_sqlcipher')) and $([System.String]::Copy('%(NativeCopyLocalItems.Identity)').Contains('browser-wasm'))" />
+    </ItemGroup>
+  </Target>
+
 </Project>

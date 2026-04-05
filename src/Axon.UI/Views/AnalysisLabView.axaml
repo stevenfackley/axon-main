@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Axon.UI.ViewModels"
+             xmlns:rendering="using:Axon.UI.Rendering"
+             x:Class="Axon.UI.Views.AnalysisLabView"
+             x:DataType="vm:AnalysisLabViewModel"
+             Background="#0F0F1A">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <Border Grid.Row="0"
+                Background="#171827"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,0,0,1"
+                Padding="16,14">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                <ComboBox Grid.Column="0"
+                          Width="180"
+                          ItemsSource="{Binding AvailableMetrics}"
+                          SelectedItem="{Binding PrimaryMetric}" />
+                <ComboBox Grid.Column="1"
+                          Width="180"
+                          Margin="10,0,0,0"
+                          ItemsSource="{Binding AvailableMetrics}"
+                          SelectedItem="{Binding SecondaryMetric}" />
+                <ComboBox Grid.Column="2"
+                          Width="96"
+                          Margin="10,0,0,0"
+                          ItemsSource="{Binding AvailableTimeframes}"
+                          SelectedItem="{Binding SelectedTimeframe}" />
+                <Button Grid.Column="3"
+                        HorizontalAlignment="Right"
+                        Content="Refresh Analysis"
+                        Command="{Binding RefreshCommand}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Background="#121321"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,0,0,1"
+                Padding="16,12">
+            <Grid ColumnDefinitions="2*,Auto,Auto,Auto">
+                <StackPanel Grid.Column="0" Spacing="6">
+                    <TextBlock Text="INSIGHT HEADLINE"
+                               FontSize="10"
+                               Foreground="#6B7280"
+                               LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding InsightHeadline}"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="#E5E7EB"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding BucketLabel}"
+                               FontSize="12"
+                               Foreground="#94A3B8" />
+                </StackPanel>
+
+                <Border Grid.Column="1" Margin="12,0,0,0" Padding="14,10" CornerRadius="10" Background="#1A1D33">
+                    <StackPanel>
+                        <TextBlock Text="CORRELATION" FontSize="10" Foreground="#6B7280" LetterSpacing="1.2" />
+                        <TextBlock Text="{Binding CorrelationCoefficient, StringFormat={}{0:F2}}" FontSize="28" FontWeight="Bold" Foreground="#00FFC8" />
+                        <TextBlock Text="{Binding CorrelationLabel}" FontSize="12" Foreground="#B6C2D9" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Margin="12,0,0,0" Padding="14,10" CornerRadius="10" Background="#1A1D33">
+                    <StackPanel>
+                        <TextBlock Text="PRIMARY AVG" FontSize="10" Foreground="#6B7280" LetterSpacing="1.2" />
+                        <TextBlock Text="{Binding PrimaryAverage, StringFormat={}{0:F1}}" FontSize="26" FontWeight="Bold" Foreground="#7DD3FC" />
+                        <TextBlock Text="{Binding PrimaryMetric.Label}" FontSize="12" Foreground="#B6C2D9" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" Margin="12,0,0,0" Padding="14,10" CornerRadius="10" Background="#1A1D33">
+                    <StackPanel>
+                        <TextBlock Text="SECONDARY AVG" FontSize="10" Foreground="#6B7280" LetterSpacing="1.2" />
+                        <TextBlock Text="{Binding SecondaryAverage, StringFormat={}{0:F1}}" FontSize="26" FontWeight="Bold" Foreground="#FBBF24" />
+                        <TextBlock Text="{Binding SecondaryMetric.Label}" FontSize="12" Foreground="#B6C2D9" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <rendering:CorrelationScatterPlot Grid.Row="2"
+                                          Margin="16"
+                                          Points="{Binding ScatterPoints}"
+                                          XAxisLabel="{Binding PrimaryMetric.Label}"
+                                          YAxisLabel="{Binding SecondaryMetric.Label}" />
+
+        <Border Grid.Row="2"
+                Background="#80000000"
+                IsVisible="{Binding IsLoading}">
+            <TextBlock Text="Computing local correlation…"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="16"
+                       Foreground="White" />
+        </Border>
+
+        <Border Grid.Row="3"
+                Background="#1A1A2E"
+                BorderBrush="#2D2D4E"
+                BorderThickness="0,1,0,0"
+                Padding="16,8">
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#FCA5A5"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </Border>
+    </Grid>
+</UserControl>

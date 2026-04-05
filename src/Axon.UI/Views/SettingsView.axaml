@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Axon.UI.ViewModels"
+             x:Class="Axon.UI.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             Background="#0F0F1A">
+
+    <Grid RowDefinitions="Auto,*" Margin="16">
+        <TextBlock Grid.Row="0"
+                   Text="Sovereign Settings"
+                   FontSize="24"
+                   FontWeight="Bold"
+                   Foreground="#E5E7EB" />
+
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="16">
+            <Border Grid.Row="0" Grid.Column="0" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="VAULT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding VaultType}" FontSize="20" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                    <TextBlock Text="{Binding KeyFingerprint}" FontSize="13" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding IsHardwareBacked, StringFormat=Hardware-backed: {0}}" Foreground="#B6C2D9" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="0" Grid.Column="1" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="SYNC" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding PendingOutboxItems}" FontSize="28" FontWeight="Bold" Foreground="#00FFC8" />
+                    <TextBlock Text="Pending outbox items" Foreground="#B6C2D9" />
+                    <TextBlock Text="{Binding LastSuccessfulSync, StringFormat=Last successful sync: {0:g}}" Foreground="#94A3B8" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="AIR-GAP" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <ToggleSwitch IsChecked="{Binding AirGapEnabled}" Content="Disable outbound networking" />
+                    <TextBlock Text="This toggle is local shell state for now; the relay service will enforce it once sync is wired." Foreground="#94A3B8" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
