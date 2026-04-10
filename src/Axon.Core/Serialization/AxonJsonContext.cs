@@ -14,9 +14,12 @@ namespace Axon.Core.Serialization;
 [JsonSerializable(typeof(BiometricEvent))]
 [JsonSerializable(typeof(SourceMetadata))]
 [JsonSerializable(typeof(SyncOutboxEntry))]
+[JsonSerializable(typeof(SyncBatch))]
+[JsonSerializable(typeof(SyncBatchAcknowledgement))]
 [JsonSerializable(typeof(AuditLogEntry))]
 [JsonSerializable(typeof(List<BiometricEvent>))]
 [JsonSerializable(typeof(List<SyncOutboxEntry>))]
+[JsonSerializable(typeof(List<SyncBatch>))]
 [JsonSerializable(typeof(BiometricType))]
 [JsonSerializable(typeof(AuditOperation))]
 [JsonSourceGenerationOptions(

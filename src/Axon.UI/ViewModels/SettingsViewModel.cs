@@ -20,6 +20,8 @@ namespace Axon.UI.ViewModels;
 public sealed class SettingsViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event EventHandler<bool>? AirGapChanged;
+    public event EventHandler<bool>? TelemetryEnabledChanged;
 
     /// <summary>Raised when the user initiates the GDPR key-destruction flow.</summary>
     public event EventHandler? NuclearOptionRequested;
@@ -65,13 +67,49 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         set => SetField(ref _lastSuccessfulSync, value);
     }
 
+    private string _syncTransportName = "Unknown";
+    public string SyncTransportName
+    {
+        get => _syncTransportName;
+        set => SetField(ref _syncTransportName, value);
+    }
+
+    private string _syncStatusText = "Idle";
+    public string SyncStatusText
+    {
+        get => _syncStatusText;
+        set => SetField(ref _syncStatusText, value);
+    }
+
+    private string? _lastSyncError;
+    public string? LastSyncError
+    {
+        get => _lastSyncError;
+        set => SetField(ref _lastSyncError, value);
+    }
+
     // ── Air-gap ───────────────────────────────────────────────────────────────
 
     private bool _airGapEnabled;
     public bool AirGapEnabled
     {
         get => _airGapEnabled;
-        set => SetField(ref _airGapEnabled, value);
+        set
+        {
+            if (!SetField(ref _airGapEnabled, value)) return;
+            AirGapChanged?.Invoke(this, value);
+        }
+    }
+
+    private bool _telemetryEnabled;
+    public bool TelemetryEnabled
+    {
+        get => _telemetryEnabled;
+        set
+        {
+            if (!SetField(ref _telemetryEnabled, value)) return;
+            TelemetryEnabledChanged?.Invoke(this, value);
+        }
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
@@ -81,10 +119,11 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     // ── INotifyPropertyChanged ────────────────────────────────────────────────
 
-    private void SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        return true;
     }
 }

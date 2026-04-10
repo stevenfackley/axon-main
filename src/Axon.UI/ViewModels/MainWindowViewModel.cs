@@ -1,23 +1,32 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-using Axon.Core.Ports;
+using Axon.UI.Application;
 using Axon.UI.Commands;
+using Axon.UI.Observability;
 
 namespace Axon.UI.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private readonly ISyncOutboxRepository _syncOutboxRepository;
+    private readonly IOutboxRelayService _outboxRelayService;
+    private readonly IObservabilityController _observabilityController;
 
-    public MainWindowViewModel(
+    internal MainWindowViewModel(
         DashboardViewModel dashboard,
         AnalysisLabViewModel analysisLab,
-        ISyncOutboxRepository syncOutboxRepository)
+        IOutboxRelayService outboxRelayService,
+        IObservabilityController observabilityController)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
-        _syncOutboxRepository = syncOutboxRepository;
+        _outboxRelayService = outboxRelayService;
+        _observabilityController = observabilityController;
+        _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
+
+        Settings.AirGapChanged += OnAirGapChanged;
+        Settings.TelemetryEnabledChanged += OnTelemetryEnabledChanged;
+        Settings.TelemetryEnabled = _observabilityController.TelemetryEnabled;
 
         ShowDashboardCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Dashboard);
         ShowAnalysisLabCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.AnalysisLab);
@@ -56,7 +65,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set
         {
             if (!SetField(ref _airGapEnabled, value)) return;
-            Settings.AirGapEnabled = value;
+            if (Settings.AirGapEnabled != value)
+            {
+                Settings.AirGapEnabled = value;
+            }
+
+            _outboxRelayService.SetAirGapEnabled(value);
             SyncStatus = value ? SyncStatus.AirGapped : SyncStatus.Idle;
         }
     }
@@ -75,6 +89,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _pendingOutboxCount, value);
     }
 
+    private string _transportName = "Unknown";
+    public string TransportName
+    {
+        get => _transportName;
+        set => SetField(ref _transportName, value);
+    }
+
     public DashboardViewModel Dashboard { get; }
 
     public AnalysisLabViewModel AnalysisLab { get; }
@@ -88,14 +109,66 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Settings.KeyFingerprint = "SEED-AXON";
         await Dashboard.InitializeAsync();
         await AnalysisLab.InitializeAsync();
+        await _outboxRelayService.StartAsync();
         await RefreshShellStateAsync();
     }
 
     public async Task RefreshShellStateAsync(CancellationToken ct = default)
     {
-        PendingOutboxCount = await _syncOutboxRepository.CountPendingAsync(ct);
-        Settings.PendingOutboxItems = PendingOutboxCount;
-        SyncStatus = AirGapEnabled ? SyncStatus.AirGapped : SyncStatus.Idle;
+        await _outboxRelayService.RefreshAsync(ct);
+        ApplyRelaySnapshot(_outboxRelayService.Current);
+    }
+
+    private void OnRelaySnapshotChanged(object? sender, RelaySnapshot snapshot) =>
+        ApplyRelaySnapshot(snapshot);
+
+    private void ApplyRelaySnapshot(RelaySnapshot snapshot)
+    {
+        PendingOutboxCount = snapshot.PendingCount;
+        Settings.PendingOutboxItems = snapshot.PendingCount;
+        Settings.LastSuccessfulSync = snapshot.LastSuccessfulSync;
+        Settings.SyncTransportName = snapshot.TransportName;
+        Settings.SyncStatusText = snapshot.State.ToString();
+        Settings.LastSyncError = snapshot.LastError;
+        TransportName = snapshot.TransportName;
+
+        if (_airGapEnabled != snapshot.AirGapEnabled)
+        {
+            _airGapEnabled = snapshot.AirGapEnabled;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AirGapEnabled)));
+            if (Settings.AirGapEnabled != snapshot.AirGapEnabled)
+            {
+                Settings.AirGapEnabled = snapshot.AirGapEnabled;
+            }
+        }
+
+        SyncStatus = snapshot.State switch
+        {
+            RelayState.Syncing => SyncStatus.Syncing,
+            RelayState.Error => SyncStatus.Error,
+            RelayState.AirGapped => SyncStatus.AirGapped,
+            _ => SyncStatus.Idle
+        };
+    }
+
+    private void OnAirGapChanged(object? sender, bool enabled)
+    {
+        if (AirGapEnabled == enabled)
+        {
+            return;
+        }
+
+        AirGapEnabled = enabled;
+    }
+
+    private void OnTelemetryEnabledChanged(object? sender, bool enabled)
+    {
+        if (_observabilityController.TelemetryEnabled == enabled)
+        {
+            return;
+        }
+
+        _observabilityController.SetTelemetryEnabled(enabled);
     }
 
     private void RaiseWorkspaceFlags()

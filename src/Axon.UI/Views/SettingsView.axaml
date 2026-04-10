@@ -12,7 +12,7 @@
                    FontWeight="Bold"
                    Foreground="#E5E7EB" />
 
-        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="16">
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="16">
             <Border Grid.Row="0" Grid.Column="0" Background="#171827" CornerRadius="14" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="VAULT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
@@ -27,7 +27,11 @@
                     <TextBlock Text="SYNC" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
                     <TextBlock Text="{Binding PendingOutboxItems}" FontSize="28" FontWeight="Bold" Foreground="#00FFC8" />
                     <TextBlock Text="Pending outbox items" Foreground="#B6C2D9" />
+                    <TextBlock Text="{Binding SyncTransportName, StringFormat=Transport: {0}}" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding SyncStatusText, StringFormat=Relay state: {0}}" Foreground="#94A3B8" />
                     <TextBlock Text="{Binding LastSuccessfulSync, StringFormat=Last successful sync: {0:g}}" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding LastSyncError, StringFormat=Last error: {0}}" Foreground="#FCA5A5"
+                               IsVisible="{Binding LastSyncError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
             </Border>
 
@@ -35,7 +39,15 @@
                 <StackPanel Spacing="8">
                     <TextBlock Text="AIR-GAP" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
                     <ToggleSwitch IsChecked="{Binding AirGapEnabled}" Content="Disable outbound networking" />
-                    <TextBlock Text="This toggle is local shell state for now; the relay service will enforce it once sync is wired." Foreground="#94A3B8" TextWrapping="Wrap" />
+                    <TextBlock Text="The relay service enforces this locally and writes current status to the desktop health report." Foreground="#94A3B8" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="OBSERVABILITY" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <ToggleSwitch IsChecked="{Binding TelemetryEnabled}" Content="Enable OpenTelemetry export" />
+                    <TextBlock Text="This controls OpenTelemetry exporters for the desktop runtime. The local health report stays available even when export is disabled." Foreground="#94A3B8" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </Grid>

@@ -6,7 +6,12 @@ using Axon.Infrastructure.Security;
 using Axon.UI.Application;
 using Axon.UI.ViewModels;
 using Axon.UI.Views;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+#if !ANDROID && !IOS
+using Axon.UI.Logging;
+using Axon.UI.Observability;
+#endif
 
 // Alias to avoid clash with Android.App.Application on the android TFM.
 using AvaloniaApp = Avalonia.Application;
@@ -54,13 +59,29 @@ public sealed class App : AvaloniaApp
             "Axon");
         Directory.CreateDirectory(dataDirectory);
 
+        // ── Logging ──────────────────────────────────────────────────────────
+        // Desktop: full Serilog pipeline (JSON console + daily rolling file).
+        // Mobile: fall back to NullLoggerFactory — platform logging is handled
+        //         by the OS (logcat / Unified Logging).
+#if !ANDROID && !IOS
+        ILoggerFactory loggerFactory = SerilogBootstrapper.CreateLoggerFactory(dataDirectory);
+        var observabilityRuntime = AxonObservabilityRuntime.Create(dataDirectory);
+        var healthReportWriter = observabilityRuntime.HealthReportWriter;
+#else
+        ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
+        var observabilityRuntime = NullObservabilityRuntime.Instance;
+        var healthReportWriter = NullHealthReportWriter.Instance;
+#endif
+
         var vault = new MockHardwareVault();
         var dbFactory = new AxonDbContextFactory(vault);
         var db = dbFactory.CreateAsync(dataDirectory).AsTask().GetAwaiter().GetResult();
 
         var biometricRepository = new BiometricRepository(db);
         var syncOutboxRepository = new SyncOutboxRepository(db);
-        var inferenceService = new LocalInferenceService(NullLogger<LocalInferenceService>.Instance);
+        var inferenceService = new LocalInferenceService(loggerFactory.CreateLogger<LocalInferenceService>());
+        var syncTransport = new LoopbackSyncTransport();
+        var relayService = new OutboxRelayService(syncOutboxRepository, syncTransport, healthReportWriter);
 
         var seedDataService = new TelemetrySeedDataService(biometricRepository);
         seedDataService.EnsureSeedDataAsync().AsTask().GetAwaiter().GetResult();
@@ -80,22 +101,29 @@ public sealed class App : AvaloniaApp
 
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
-        var mainWindow = new MainWindowViewModel(dashboard, analysisLab, syncOutboxRepository);
+        var mainWindow = new MainWindowViewModel(dashboard, analysisLab, relayService, observabilityRuntime);
 
-        return new AppRuntime(mainWindow, inferenceService, db);
+        return new AppRuntime(mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime);
     }
 }
 
 internal sealed class AppRuntime(
     MainWindowViewModel mainWindowViewModel,
     IDisposable inferenceService,
-    IDisposable dbContext) : IDisposable
+    IDisposable dbContext,
+    IAsyncDisposable relayService,
+    ILoggerFactory loggerFactory,
+    IDisposable observabilityRuntime) : IDisposable
 {
     public MainWindowViewModel MainWindowViewModel { get; } = mainWindowViewModel;
 
     public void Dispose()
     {
+        relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
         inferenceService.Dispose();
         dbContext.Dispose();
+        // Flush and close Serilog sinks (writes any buffered log entries).
+        loggerFactory.Dispose();
+        observabilityRuntime.Dispose();
     }
 }

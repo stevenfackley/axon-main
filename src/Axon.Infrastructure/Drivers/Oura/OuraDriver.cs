@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -96,10 +97,16 @@ public sealed class OuraDriver : IBiometricDriver
         DateTimeOffset since,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        var sw = Stopwatch.StartNew();
+        _logger.LogInformation(
+            "Sync start. Driver={Driver} Since={Since:O}",
+            DriverId, since);
+
         var accessToken = await ResolveAccessTokenAsync(ct).ConfigureAwait(false);
         if (accessToken is null)
         {
-            _logger.LogWarning("Oura: No valid access token — skipping API fetch.");
+            _logger.LogWarning(
+                "Sync skipped — no valid access token. Driver={Driver}", DriverId);
             yield break;
         }
 
