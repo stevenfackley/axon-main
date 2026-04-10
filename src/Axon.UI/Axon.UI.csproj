@@ -55,6 +55,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Axon.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Avalonia UI core (all targets) -->
     <PackageReference Include="Avalonia" Version="11.*" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.*" />
