@@ -40,33 +40,25 @@ public sealed class AxonDbContextFactory(IHardwareVault vault)
             vault.ZeroKey(keyMaterial);
         }
 
-        var options = new DbContextOptionsBuilder<AxonDbContext>()
-            .UseSqlite(connStr, sqlite =>
-            {
-                sqlite.CommandTimeout(30);
-            })
-            .Options;
+        var ctx = new AxonDbContext(CreateOptions(connStr));
 
-        var ctx = new AxonDbContext(options);
-
-        // Enable WAL mode and set page size for high-throughput time-series writes
-        await ctx.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;",  ct).ConfigureAwait(false);
-        await ctx.Database.ExecuteSqlRawAsync("PRAGMA page_size=4096;",    ct).ConfigureAwait(false);
-        await ctx.Database.ExecuteSqlRawAsync("PRAGMA cache_size=-32000;", ct).ConfigureAwait(false);
-        await ctx.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;",ct).ConfigureAwait(false);
-        await ctx.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;",   ct).ConfigureAwait(false);
-
-        await ctx.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        await ConfigureDatabaseAsync(ctx, ct).ConfigureAwait(false);
+        await ctx.Database.MigrateAsync(ct).ConfigureAwait(false);
 
         return ctx;
     }
+
+    internal static DbContextOptions<AxonDbContext> CreateOptions(string connectionString) =>
+        new DbContextOptionsBuilder<AxonDbContext>()
+            .UseSqlite(connectionString, sqlite => sqlite.CommandTimeout(30))
+            .Options;
 
     /// <summary>
     /// Builds the SQLite connection string with the hex-encoded SQLCipher key.
     /// The <paramref name="key"/> span is expected to be 32 bytes (AES-256).
     /// This method operates on stack memory only — no heap allocation for the key.
     /// </summary>
-    private static string BuildConnectionString(string dataDirectory, ReadOnlySpan<byte> key)
+    internal static string BuildConnectionString(string dataDirectory, ReadOnlySpan<byte> key)
     {
         // Hex-encode 32 bytes → 64 hex chars on the stack
         Span<char> hex = stackalloc char[64];
@@ -80,6 +72,16 @@ public sealed class AxonDbContextFactory(IHardwareVault vault)
         var dbPath = Path.Combine(dataDirectory, DbFileName);
         // Use interpolated string — hex span is copied into the string, not retained
         return $"Data Source={dbPath};Password=hex:{new string(hex)};";
+    }
+
+    private static async Task ConfigureDatabaseAsync(AxonDbContext context, CancellationToken ct)
+    {
+        // Enable WAL mode and set page size for high-throughput time-series writes.
+        await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
+        await context.Database.ExecuteSqlRawAsync("PRAGMA page_size=4096;", ct).ConfigureAwait(false);
+        await context.Database.ExecuteSqlRawAsync("PRAGMA cache_size=-32000;", ct).ConfigureAwait(false);
+        await context.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
+        await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;", ct).ConfigureAwait(false);
     }
 
     private static char ToHexChar(int nibble) =>

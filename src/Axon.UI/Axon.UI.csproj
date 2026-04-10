@@ -62,6 +62,10 @@
     <!-- SkiaSharp for direct GPU canvas access in custom render controls -->
     <PackageReference Include="SkiaSharp" Version="2.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <!-- Serilog structured logging (desktop entry point) -->
     <PackageReference Include="Serilog" Version="4.*" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="9.*" />
