@@ -17,7 +17,7 @@
     <Optimize>true</Optimize>
 
     <!-- AOT only on desktop; Android uses its own AOT pipeline via the workload -->
-    <PublishAot Condition="'$(TargetFramework)' == 'net10.0'">true</PublishAot>
+<!--     <PublishAot Condition="'$(TargetFramework)' == 'net10.0'">true</PublishAot> -->
 
     <!--
       OutputType for the desktop TFM:
@@ -62,13 +62,14 @@
 
   <ItemGroup>
     <!-- Avalonia UI core (all targets) -->
-    <PackageReference Include="Avalonia" Version="11.*" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.*" />
-    <PackageReference Include="Avalonia.Skia" Version="11.*" />
+    <PackageReference Include="Avalonia" Version="12.0.0" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Skia" Version="12.0.0" />
     <!-- SkiaSharp for direct GPU canvas access in custom render controls -->
-    <PackageReference Include="SkiaSharp" Version="2.*" />
+    <PackageReference Include="SkiaSharp" Version="3.119.3-preview.1.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.*">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -85,17 +86,20 @@
 
   <!-- Desktop-only backend -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Avalonia.Desktop" Version="11.*" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
   </ItemGroup>
 
   <!-- Android backend -->
   <ItemGroup Condition="$(TargetFramework.Contains('android'))">
-    <PackageReference Include="Avalonia.Android" Version="11.*" />
+    <PackageReference Include="Avalonia.Android" Version="12.0.0" />
   </ItemGroup>
 
   <!-- iOS backend -->
   <ItemGroup Condition="$(TargetFramework.Contains('ios'))">
-    <PackageReference Include="Avalonia.iOS" Version="11.*" />
+    <PackageReference Include="Avalonia.iOS" Version="12.0.0" />
+
+
+
   </ItemGroup>
 
   <!-- iOS HealthKit entitlement file — forward slash path works on all host OSes -->

@@ -311,7 +311,7 @@ public sealed class SkiaTelemetryChart : Control
             uniforms["colorRedLine"]    = ColorToFloat4(0xDC, 0x26, 0x26);
             uniforms["backgroundAlpha"] = _bgAlpha;
 
-            using var shader = effect.ToShader(false, uniforms);
+            using var shader = effect.ToShader(uniforms);
             using var paint  = new SKPaint { Shader = shader };
 
             canvas.DrawRect(SKRect.Create(w, h), paint);

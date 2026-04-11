@@ -8,7 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
     <!-- Native AOT: no reflection-based serialization -->
-    <PublishAot>true</PublishAot>
+    <!-- <PublishAot>true</PublishAot> -->
     <TrimmerRootDescriptor>TrimmerRoots.xml</TrimmerRootDescriptor>
     <AssemblyName>Axon.Core</AssemblyName>
     <RootNamespace>Axon.Core</RootNamespace>

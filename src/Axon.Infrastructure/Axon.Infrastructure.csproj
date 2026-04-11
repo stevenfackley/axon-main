@@ -7,7 +7,7 @@
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <PublishAot>true</PublishAot>
+    <!-- <PublishAot>true</PublishAot> -->
     <AssemblyName>Axon.Infrastructure</AssemblyName>
     <RootNamespace>Axon.Infrastructure</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -25,12 +25,12 @@
 
   <ItemGroup>
     <!-- EF Core; pin to latest stable -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.*" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.*">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <!-- SQLCipher encrypted SQLite provider -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
@@ -43,8 +43,8 @@
     <!-- ML.NET: core + time-series catalog for IID Spike + SSA Forecasting -->
     <!-- Note: ML.NET uses dynamic code generation internally; PublishAot is set to
          false for inference-heavy builds. For strict AOT targets use ONNX export. -->
-    <PackageReference Include="Microsoft.ML" Version="3.*" />
-    <PackageReference Include="Microsoft.ML.TimeSeries" Version="3.*" />
+    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML.TimeSeries" Version="5.0.0" />
   </ItemGroup>
 
   <!--
