@@ -31,12 +31,13 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
 
       - name: Install Android workload
         run: dotnet workload install android
 
       - name: Restore dependencies
-        run: dotnet restore Axon.sln
+        run: dotnet restore Axon.sln --configfile NuGet.Config
 
       - name: Build (treat warnings as errors)
         run: dotnet build Axon.sln --no-restore -c Release /p:TreatWarningsAsErrors=true
@@ -74,9 +75,10 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
 
       - name: Restore
-        run: dotnet restore Axon.sln
+        run: dotnet restore Axon.sln --configfile NuGet.Config
 
       - name: AOT Publish — Axon.Core
         run: dotnet publish src/Axon.Core/Axon.Core.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
@@ -109,9 +111,10 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          cache: true
 
       - name: Restore
-        run: dotnet restore Axon.sln
+        run: dotnet restore Axon.sln --configfile NuGet.Config
 
       - name: Check for known vulnerabilities
         run: dotnet list Axon.sln package --vulnerable --include-transitive
