@@ -16,7 +16,7 @@ namespace Axon.UI.Rendering;
 /// Performance Characteristics:
 ///   • All intermediate work uses <see cref="ArrayPool{T}"/> — zero heap allocation
 ///     on the hot path when reusing a pooled output buffer.
-///   • Intended to run on a <see cref="Task.Run"/> background thread before any
+///   • Intended to run on a <c>Task.Run</c> background thread before any
 ///     results reach the UI layer, honoring the 120fps guardrail.
 ///   • Input spans > 24 hours MUST pass through this downsampler before binding
 ///     to <see cref="Axon.UI.ViewModels.DashboardViewModel.ChartPoints"/>.
@@ -140,7 +140,7 @@ public static class LttbDownsampler
     }
 
     /// <summary>
-    /// Async wrapper that executes LTTB on a <see cref="Task.Run"/> background thread
+    /// Async wrapper that executes LTTB on a <c>Task.Run</c> background thread
     /// and posts the result back to the caller without blocking the UI thread.
     ///
     /// This is the primary entry point for the ViewModel layer.

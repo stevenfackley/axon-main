@@ -367,7 +367,7 @@ public sealed class SkiaTelemetryChart : Control
         ///   [2i+1] = (x, y + halfLineWidth)   bottom of the thick line
         ///
         /// Consecutive quads share two vertices, so N points → 2N vertices →
-        /// (2N-2) triangles rendered in ONE <see cref="SKCanvas.DrawVertices"/> call.
+        /// (2N-2) triangles rendered in ONE <c>SKCanvas.DrawVertices</c> call.
         ///
         /// Memory: both SKPoint[] and SKColor[] buffers are rented from
         /// <see cref="ArrayPool{T}"/> and returned in the finally block.

@@ -15,6 +15,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <Optimize>true</Optimize>
+    <!-- CS0419: ambiguous cref overloads in XML docs are doc-only noise -->
+    <NoWarn>CS0419</NoWarn>
 
     <!-- AOT only on desktop; Android uses its own AOT pipeline via the workload -->
 <!--     <PublishAot Condition="'$(TargetFramework)' == 'net10.0'">true</PublishAot> -->
