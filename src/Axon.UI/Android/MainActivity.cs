@@ -23,9 +23,5 @@ namespace Axon.UI.Android;
         ConfigChanges.UiMode)]
 public class MainActivity : AvaloniaMainActivity
 {
-    protected override AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-                     .UsePlatformDetect()
-                     .LogToTrace();
 }
 #endif
