@@ -79,11 +79,11 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
-      - name: Install Android workload
-        run: dotnet workload install android
-
-      - name: Restore
-        run: dotnet restore Axon.sln --configfile NuGet.Config -r win-x64
+      - name: Restore (RID-specific — solution restore would pull Mono for Android TFM)
+        run: |
+          dotnet restore src/Axon.Core/Axon.Core.csproj --configfile NuGet.Config -r win-x64
+          dotnet restore src/Axon.Infrastructure/Axon.Infrastructure.csproj --configfile NuGet.Config -r win-x64
+          dotnet restore src/Axon.UI/Axon.UI.csproj --configfile NuGet.Config -r win-x64 -p:TargetFramework=net10.0
 
       - name: AOT Publish — Axon.Core
         run: dotnet publish src/Axon.Core/Axon.Core.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
