@@ -93,13 +93,22 @@
             DataContext is explicitly forwarded to Dashboard so MainView's
             x:DataType="vm:DashboardViewModel" compiled binding resolves correctly.
         -->
+        <!--
+            Each view's x:DataType causes Avalonia compiled binding to resolve
+            attribute bindings against the child ViewModel type, not MainWindowViewModel.
+            Fix: IsVisible goes on a wrapper Panel (no x:DataType → inherits MainWindowViewModel);
+            DataContext uses ReflectionBinding to bypass compile-time type checking.
+        -->
         <Grid Grid.Row="1">
-            <views:MainView IsVisible="{Binding IsDashboardActive}"
-                            DataContext="{Binding Dashboard}" />
-            <views:AnalysisLabView IsVisible="{Binding IsAnalysisLabActive}"
-                                   DataContext="{Binding AnalysisLab}" />
-            <views:SettingsView IsVisible="{Binding IsSettingsActive}"
-                                DataContext="{Binding Settings}" />
+            <Panel IsVisible="{Binding IsDashboardActive}">
+                <views:MainView DataContext="{ReflectionBinding Dashboard}" />
+            </Panel>
+            <Panel IsVisible="{Binding IsAnalysisLabActive}">
+                <views:AnalysisLabView DataContext="{ReflectionBinding AnalysisLab}" />
+            </Panel>
+            <Panel IsVisible="{Binding IsSettingsActive}">
+                <views:SettingsView DataContext="{ReflectionBinding Settings}" />
+            </Panel>
         </Grid>
 
     </Grid>
