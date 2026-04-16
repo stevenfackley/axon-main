@@ -49,6 +49,9 @@
 
     <!-- Android Health Connect permissions wired via manifest -->
     <AndroidManifestPlaceholders>healthConnectPermission=true</AndroidManifestPlaceholders>
+
+    <!-- androidx.lifecycle.runtime requires minSdk ≥ 23; Health Connect requires ≥ 26 anyway -->
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('android'))">23.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <ItemGroup>
