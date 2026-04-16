@@ -83,7 +83,7 @@ jobs:
         run: dotnet workload install android
 
       - name: Restore
-        run: dotnet restore Axon.sln --configfile NuGet.Config
+        run: dotnet restore Axon.sln --configfile NuGet.Config -r win-x64
 
       - name: AOT Publish — Axon.Core
         run: dotnet publish src/Axon.Core/Axon.Core.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
