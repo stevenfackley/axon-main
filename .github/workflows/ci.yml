@@ -92,7 +92,7 @@ jobs:
         run: dotnet publish src/Axon.Infrastructure/Axon.Infrastructure.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
 
       - name: AOT Publish — Axon.UI
-        run: dotnet publish src/Axon.UI/Axon.UI.csproj -r win-x64 -c Release /p:PublishAot=true --no-restore
+        run: dotnet publish src/Axon.UI/Axon.UI.csproj -f net10.0 -r win-x64 -c Release /p:PublishAot=true --no-restore
 
       - name: Upload AOT binary
         uses: actions/upload-artifact@v4
