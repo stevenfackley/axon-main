@@ -14,7 +14,7 @@ namespace Axon.Infrastructure.Ingestion;
 /// is decoupled from the persistence write path, preventing large payloads from
 /// being buffered in managed memory. I/O is never performed inside a DB transaction.
 ///
-/// Inference is fired via <see cref="Task.Run"/> after the last batch commits —
+/// Inference is fired via <c>Task.Run</c> after the last batch commits —
 /// it is a deliberate fire-and-forget with structured error capture.
 /// </summary>
 public sealed class IngestionOrchestrator : IIngestionOrchestrator
@@ -163,7 +163,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
 
     /// <summary>
     /// Fires an inference pass in the background after a successful ingest.
-    /// Uses <see cref="Task.Run"/> so it never blocks the ingestion caller.
+    /// Uses <c>Task.Run</c> so it never blocks the ingestion caller.
     /// Errors are captured and logged — they must not surface to the caller.
     /// </summary>
     private void TriggerInferencePass(string driverId, CancellationToken ct)

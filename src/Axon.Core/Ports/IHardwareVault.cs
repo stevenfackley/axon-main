@@ -12,7 +12,7 @@ namespace Axon.Core.Ports;
 ///   • No raw key material is ever written to managed memory as a <see cref="string"/>.
 ///     Callers receive key bytes in a <see cref="Memory{T}"/> that is zeroed
 ///     after use by calling <see cref="ZeroKey"/>.
-///   • <see cref="DeriveKeyAsync"/> is deterministic for a given <paramref name="keyLabel"/>;
+///   • <see cref="DeriveKeyAsync"/> is deterministic for a given <c>keyLabel</c>;
 ///     repeated calls return the same key bytes (hardware sealing ensures this).
 /// </summary>
 public interface IHardwareVault

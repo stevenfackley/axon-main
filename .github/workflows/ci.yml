@@ -32,6 +32,7 @@ jobs:
         with:
           global-json-file: global.json
           cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Install Android workload
         run: dotnet workload install android
@@ -76,6 +77,7 @@ jobs:
         with:
           global-json-file: global.json
           cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Restore
         run: dotnet restore Axon.sln --configfile NuGet.Config
@@ -112,6 +114,7 @@ jobs:
         with:
           global-json-file: global.json
           cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Restore
         run: dotnet restore Axon.sln --configfile NuGet.Config

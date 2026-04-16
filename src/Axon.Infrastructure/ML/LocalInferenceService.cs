@@ -18,7 +18,7 @@ namespace Axon.Infrastructure.ML;
 ///      Singular Spectrum Analysis (SSA) time-series forecasting.
 ///
 /// Threading: All <see cref="PredictionEngine{TSrc,TDst}"/> calls are marshalled
-/// through <see cref="Task.Run"/> to keep the UI thread free for 120fps rendering.
+/// through <c>Task.Run</c> to keep the UI thread free for 120fps rendering.
 ///
 /// AOT Safety:
 ///   • Models are loaded via explicit <see cref="FileStream"/> (no resource embedding).

@@ -6,7 +6,7 @@ namespace Axon.Core.Ports;
 /// Port for the Transactional Outbox table.
 ///
 /// Contract rules (enforced at code-review):
-///   1. <see cref="AddAsync"/> is ALWAYS called inside the same EF Core
+///   1. <c>AddAsync</c> is ALWAYS called inside the same EF Core
 ///      SaveChanges call as the owning <see cref="BiometricEvent"/> write.
 ///   2. <see cref="MarkProcessedAsync"/> and <see cref="MarkFailedAsync"/> are
 ///      ALWAYS called OUTSIDE any open DB transaction (no I/O inside tx).
