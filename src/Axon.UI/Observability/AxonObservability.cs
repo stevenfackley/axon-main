@@ -20,7 +20,8 @@ internal interface IObservabilityController
     void SetTelemetryEnabled(bool enabled);
 }
 
-#if !ANDROID && !IOS
+// ActivitySource and Meter are BCL types available on all platforms.
+// AxonObservabilityRuntime (OpenTelemetry SDK) is desktop-only via #if below.
 internal static class AxonObservability
 {
     public const string ServiceName = "Axon.UI";
@@ -33,6 +34,7 @@ internal static class AxonObservability
     public static readonly Histogram<int> PendingOutboxHistogram = Meter.CreateHistogram<int>("axon.relay.pending_outbox");
 }
 
+#if !ANDROID && !IOS
 internal sealed class AxonObservabilityRuntime : IDisposable, IObservabilityController
 {
     private readonly object _gate = new();

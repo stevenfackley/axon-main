@@ -8,9 +8,9 @@ using Axon.UI.ViewModels;
 using Axon.UI.Views;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Axon.UI.Observability;  // NullObservabilityRuntime / NullHealthReportWriter needed on all platforms
 #if !ANDROID && !IOS
 using Axon.UI.Logging;
-using Axon.UI.Observability;
 #endif
 
 // Alias to avoid clash with Android.App.Application on the android TFM.
