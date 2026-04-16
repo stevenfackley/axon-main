@@ -21,9 +21,11 @@ namespace Axon.UI.Android;
         ConfigChanges.Orientation |
         ConfigChanges.ScreenSize |
         ConfigChanges.UiMode)]
-public class MainActivity : AvaloniaMainActivity<App>
+public class MainActivity : AvaloniaMainActivity
 {
-    protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
-        => base.CustomizeAppBuilder(builder);
+    protected override AppBuilder BuildAvaloniaApp()
+        => AppBuilder.Configure<App>()
+                     .UsePlatformDetect()
+                     .LogToTrace();
 }
 #endif

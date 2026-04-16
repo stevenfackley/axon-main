@@ -45,7 +45,7 @@ public static class LttbDownsampler
     ///     Target output point count. Must be ≥ 2. Values below 2 are clamped to 2.
     /// </param>
     /// <returns>
-    ///     A new <see cref="ChartPoint[]"/> of at most <paramref name="threshold"/>
+    ///     A new array of <see cref="ChartPoint"/> of at most <paramref name="threshold"/>
     ///     elements selected to maximally preserve visual fidelity.
     /// </returns>
     public static ChartPoint[] Downsample(

@@ -154,7 +154,7 @@ public sealed class SkiaTelemetryChart : Control
     private static readonly Lazy<SKRuntimeEffect?> CachedShaderEffect =
         new(() =>
         {
-            var effect = SKRuntimeEffect.Create(SkslShaderSource, out string? errors);
+            var effect = SKRuntimeEffect.CreateShader(SkslShaderSource, out string? errors);
             if (errors is not null)
             {
                 // Log but don't crash — chart degrades gracefully without the shader.
@@ -334,10 +334,10 @@ public sealed class SkiaTelemetryChart : Control
                 Style       = SKPaintStyle.Stroke
             };
 
+            using var labelFont  = new SKFont { Size = 11f };
             using var labelPaint = new SKPaint
             {
                 Color       = LabelColor,
-                TextSize    = 11f,
                 IsAntialias = true
             };
 
@@ -353,7 +353,7 @@ public sealed class SkiaTelemetryChart : Control
 
                 // Offset label upward so it sits above its corresponding grid line.
                 if (y > 14f)   // Don't paint off the top edge.
-                    canvas.DrawText($"{value:F0}", 6f, y - 3f, labelPaint);
+                    canvas.DrawText($"{value:F0}", 6f, y - 3f, SKTextAlign.Left, labelFont, labelPaint);
             }
         }
 
