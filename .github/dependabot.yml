@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 10
+    groups:
+      dotnet-runtime:
+        patterns: ["Microsoft.Extensions.*", "Microsoft.AspNetCore.*"]
+      testing:
+        patterns: ["xunit*", "coverlet.*", "Microsoft.NET.Test.*", "NetArchTest.*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
