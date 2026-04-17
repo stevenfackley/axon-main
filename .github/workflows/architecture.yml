@@ -1,0 +1,35 @@
+name: architecture
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: architecture-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  boundary-check:
+    name: Axon.Core boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Axon.Core has no Infrastructure/UI references
+        shell: bash
+        run: |
+          if grep -i "Axon.Infrastructure\|Axon.UI" src/Axon.Core/Axon.Core.csproj; then
+            echo "::error::Axon.Core must not reference Axon.Infrastructure or Axon.UI."
+            exit 1
+          fi
+          echo "Axon.Core boundary is clean."
+
+      - name: Verify no hardcoded keys or connection strings in Core
+        shell: bash
+        run: |
+          if grep -rEi "password\s*=|key\s*=|secret\s*=|connectionstring\s*=" src/Axon.Core/ --include="*.cs"; then
+            echo "::error::Potential hardcoded secret detected in Axon.Core."
+            exit 1
+          fi
+          echo "No hardcoded secrets in Core."
