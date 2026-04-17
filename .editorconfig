@@ -1,0 +1,26 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,md}]
+indent_size = 2
+
+[*.{ps1,psm1,psd1,cmd,bat}]
+end_of_line = crlf
+
+[*.cs]
+dotnet_sort_system_directives_first = true
+csharp_new_line_before_open_brace = all
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+
+# Treat these as errors in CI
+dotnet_diagnostic.CA2007.severity = error          # ConfigureAwait
+dotnet_diagnostic.IDE0005.severity = error         # unnecessary usings

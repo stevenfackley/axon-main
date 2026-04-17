@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh:*)",
+      "Bash(git:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker build:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet list:*)",
+      "Bash(dotnet format:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(kubectl get:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(helm template:*)",
+      "Bash(aws ecr:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(git push --force:*)",
+      "Bash(aws iam:*)"
+    ]
+  },
+  "env": {
+    "POWERSHELL_TELEMETRY_OPTOUT": "1",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "DOTNET_NOLOGO": "1"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "pwsh -NoProfile -File .claude/hooks/format-dotnet.ps1" }
+        ]
+      }
+    ]
+  }
+}
