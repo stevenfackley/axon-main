@@ -1,0 +1,3 @@
+[*.cs]
+# App assembly (not a library) — ConfigureAwait is noise. See CI_AUDIT_2026-04-19.md.
+dotnet_diagnostic.CA2007.severity = none
