@@ -113,7 +113,8 @@ public sealed class WhoopDriver : IBiometricDriver
                            since, token, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(r =>
-                               WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId))))
+                               WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -124,7 +125,8 @@ public sealed class WhoopDriver : IBiometricDriver
                            since, token, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(s =>
-                               WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId))))
+                               WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -135,7 +137,8 @@ public sealed class WhoopDriver : IBiometricDriver
                            since, token, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(c =>
-                               WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId))))
+                               WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -146,7 +149,8 @@ public sealed class WhoopDriver : IBiometricDriver
                            since, token, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(w =>
-                               WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId))))
+                               WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -204,48 +208,54 @@ public sealed class WhoopDriver : IBiometricDriver
 
         _logger.LogInformation("Whoop: Importing file {File}", Path.GetFileName(jsonFilePath));
 
-        await using var stream = File.OpenRead(jsonFilePath);
+        var stream = File.OpenRead(jsonFilePath);
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        if (fileName.Contains("recovery"))
+        try
         {
-            var list = await JsonSerializer.DeserializeAsync<WhoopRecoveryList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var r in list.Records)
-                    foreach (var evt in WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId))
-                        yield return evt;
+            if (fileName.Contains("recovery"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<WhoopRecoveryList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var r in list.Records)
+                        foreach (var evt in WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("sleep"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<WhoopSleepList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var s in list.Records)
+                        foreach (var evt in WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("cycle"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<WhoopCycleList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var c in list.Records)
+                        foreach (var evt in WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("workout"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<WhoopWorkoutList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var w in list.Records)
+                        foreach (var evt in WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId))
+                            yield return evt;
+            }
+            else
+            {
+                _logger.LogWarning("Whoop: Unrecognised export file name '{File}' — skipping.", fileName);
+            }
         }
-        else if (fileName.Contains("sleep"))
+        finally
         {
-            var list = await JsonSerializer.DeserializeAsync<WhoopSleepList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var s in list.Records)
-                    foreach (var evt in WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("cycle"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<WhoopCycleList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var c in list.Records)
-                    foreach (var evt in WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("workout"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<WhoopWorkoutList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var w in list.Records)
-                    foreach (var evt in WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId))
-                        yield return evt;
-        }
-        else
-        {
-            _logger.LogWarning("Whoop: Unrecognised export file name '{File}' — skipping.", fileName);
+            await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -308,11 +318,19 @@ public sealed class WhoopDriver : IBiometricDriver
                 yield break;
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            var page = await JsonSerializer.DeserializeAsync<TPage>(
-                stream,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                ct).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            TPage? page = null;
+            try
+            {
+                page = await JsonSerializer.DeserializeAsync<TPage>(
+                    stream,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                    ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
 
             if (page is null) yield break;
 

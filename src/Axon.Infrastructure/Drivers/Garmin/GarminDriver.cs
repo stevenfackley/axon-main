@@ -113,7 +113,8 @@ public sealed class GarminDriver : IBiometricDriver
         await foreach (var evt in FetchAndMapAsync<GarminDailySummaryList>(
                            dailyUrl, token, ct,
                            list => list.Dailies.SelectMany(d =>
-                               GarminNormalizationMapper.MapDailySummary(d, correlationId))))
+                               GarminNormalizationMapper.MapDailySummary(d, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -125,7 +126,8 @@ public sealed class GarminDriver : IBiometricDriver
         await foreach (var evt in FetchAndMapAsync<GarminSleepSummaryList>(
                            sleepUrl, token, ct,
                            list => list.Sleeps.SelectMany(s =>
-                               GarminNormalizationMapper.MapSleepSummary(s, correlationId))))
+                               GarminNormalizationMapper.MapSleepSummary(s, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -137,7 +139,8 @@ public sealed class GarminDriver : IBiometricDriver
         await foreach (var evt in FetchAndMapAsync<GarminHrvSummaryList>(
                            hrvUrl, token, ct,
                            list => list.HrvSummaries.SelectMany(h =>
-                               GarminNormalizationMapper.MapHrvSummary(h, correlationId))))
+                               GarminNormalizationMapper.MapHrvSummary(h, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -149,7 +152,8 @@ public sealed class GarminDriver : IBiometricDriver
         await foreach (var evt in FetchAndMapAsync<GarminBodyCompositionList>(
                            bodyUrl, token, ct,
                            list => list.Compositions.SelectMany(c =>
-                               GarminNormalizationMapper.MapBodyComposition(c, correlationId))))
+                               GarminNormalizationMapper.MapBodyComposition(c, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -207,47 +211,53 @@ public sealed class GarminDriver : IBiometricDriver
 
         _logger.LogInformation("Garmin: Importing file {File}", Path.GetFileName(jsonFilePath));
 
-        await using var stream = File.OpenRead(jsonFilePath);
-
-        if (fileName.Contains("daily") || fileName.Contains("activit"))
+        var stream = File.OpenRead(jsonFilePath);
+        try
         {
-            var list = await JsonSerializer.DeserializeAsync<GarminDailySummaryList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var d in list.Dailies)
-                    foreach (var evt in GarminNormalizationMapper.MapDailySummary(d, correlationId))
-                        yield return evt;
+            if (fileName.Contains("daily") || fileName.Contains("activit"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<GarminDailySummaryList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var d in list.Dailies)
+                        foreach (var evt in GarminNormalizationMapper.MapDailySummary(d, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("sleep"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<GarminSleepSummaryList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var s in list.Sleeps)
+                        foreach (var evt in GarminNormalizationMapper.MapSleepSummary(s, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("hrv"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<GarminHrvSummaryList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var h in list.HrvSummaries)
+                        foreach (var evt in GarminNormalizationMapper.MapHrvSummary(h, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("body") || fileName.Contains("weight"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<GarminBodyCompositionList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var c in list.Compositions)
+                        foreach (var evt in GarminNormalizationMapper.MapBodyComposition(c, correlationId))
+                            yield return evt;
+            }
+            else
+            {
+                _logger.LogWarning("Garmin: Unrecognised export file name '{File}' — skipping.", fileName);
+            }
         }
-        else if (fileName.Contains("sleep"))
+        finally
         {
-            var list = await JsonSerializer.DeserializeAsync<GarminSleepSummaryList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var s in list.Sleeps)
-                    foreach (var evt in GarminNormalizationMapper.MapSleepSummary(s, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("hrv"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<GarminHrvSummaryList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var h in list.HrvSummaries)
-                    foreach (var evt in GarminNormalizationMapper.MapHrvSummary(h, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("body") || fileName.Contains("weight"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<GarminBodyCompositionList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var c in list.Compositions)
-                    foreach (var evt in GarminNormalizationMapper.MapBodyComposition(c, correlationId))
-                        yield return evt;
-        }
-        else
-        {
-            _logger.LogWarning("Garmin: Unrecognised export file name '{File}' — skipping.", fileName);
+            await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -280,11 +290,19 @@ public sealed class GarminDriver : IBiometricDriver
             yield break;
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var result = await JsonSerializer.DeserializeAsync<TResponse>(
-            stream,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-            ct).ConfigureAwait(false);
+        var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        TResponse? result = null;
+        try
+        {
+            result = await JsonSerializer.DeserializeAsync<TResponse>(
+                stream,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
 
         if (result is null) yield break;
 

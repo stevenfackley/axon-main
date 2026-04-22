@@ -121,7 +121,8 @@ public sealed class OuraDriver : IBiometricDriver
                            accessToken, ct,
                            page => page.NextToken,
                            page => page.Data.SelectMany(r =>
-                               OuraNormalizationMapper.MapDailyReadiness(r, correlationId))))
+                               OuraNormalizationMapper.MapDailyReadiness(r, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -132,7 +133,8 @@ public sealed class OuraDriver : IBiometricDriver
                            accessToken, ct,
                            page => page.NextToken,
                            page => page.Data.SelectMany(s =>
-                               OuraNormalizationMapper.MapSleepSession(s, correlationId))))
+                               OuraNormalizationMapper.MapSleepSession(s, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -143,7 +145,8 @@ public sealed class OuraDriver : IBiometricDriver
                            accessToken, ct,
                            page => page.NextToken,
                            page => page.Data.SelectMany(a =>
-                               OuraNormalizationMapper.MapDailyActivity(a, correlationId))))
+                               OuraNormalizationMapper.MapDailyActivity(a, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -158,7 +161,8 @@ public sealed class OuraDriver : IBiometricDriver
                            accessToken, ct,
                            page => page.NextToken,
                            page => page.Data.Select(hr =>
-                               OuraNormalizationMapper.MapHeartRateSample(hr, ringId, correlationId))))
+                               OuraNormalizationMapper.MapHeartRateSample(hr, ringId, correlationId)))
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -177,7 +181,8 @@ public sealed class OuraDriver : IBiometricDriver
                                    if (e is not null) events.Add(e);
                                }
                                return events;
-                           }))
+                           })
+                           .ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -234,57 +239,63 @@ public sealed class OuraDriver : IBiometricDriver
 
         _logger.LogInformation("Oura: Importing file {File}", Path.GetFileName(jsonFilePath));
 
-        await using var stream = File.OpenRead(jsonFilePath);
-
-        if (fileName.Contains("readiness"))
+        var stream = File.OpenRead(jsonFilePath);
+        try
         {
-            var list = await JsonSerializer.DeserializeAsync<OuraDailyReadinessList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var r in list.Data)
-                    foreach (var evt in OuraNormalizationMapper.MapDailyReadiness(r, correlationId))
-                        yield return evt;
+            if (fileName.Contains("readiness"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<OuraDailyReadinessList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var r in list.Data)
+                        foreach (var evt in OuraNormalizationMapper.MapDailyReadiness(r, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("sleep"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<OuraSleepSessionList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var s in list.Data)
+                        foreach (var evt in OuraNormalizationMapper.MapSleepSession(s, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("activit"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<OuraDailyActivityList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var a in list.Data)
+                        foreach (var evt in OuraNormalizationMapper.MapDailyActivity(a, correlationId))
+                            yield return evt;
+            }
+            else if (fileName.Contains("heart"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<OuraHeartRateList>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var hr in list.Data)
+                        yield return OuraNormalizationMapper.MapHeartRateSample(hr, ringId, correlationId);
+            }
+            else if (fileName.Contains("spo2"))
+            {
+                var list = await JsonSerializer.DeserializeAsync<OuraSpO2List>(
+                    stream, jsonOptions, ct).ConfigureAwait(false);
+                if (list is not null)
+                    foreach (var s in list.Data)
+                    {
+                        var evt = OuraNormalizationMapper.MapSpO2Daily(s, ringId, correlationId);
+                        if (evt is not null) yield return evt;
+                    }
+            }
+            else
+            {
+                _logger.LogWarning("Oura: Unrecognised export file name '{File}' — skipping.", fileName);
+            }
         }
-        else if (fileName.Contains("sleep"))
+        finally
         {
-            var list = await JsonSerializer.DeserializeAsync<OuraSleepSessionList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var s in list.Data)
-                    foreach (var evt in OuraNormalizationMapper.MapSleepSession(s, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("activit"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<OuraDailyActivityList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var a in list.Data)
-                    foreach (var evt in OuraNormalizationMapper.MapDailyActivity(a, correlationId))
-                        yield return evt;
-        }
-        else if (fileName.Contains("heart"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<OuraHeartRateList>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var hr in list.Data)
-                    yield return OuraNormalizationMapper.MapHeartRateSample(hr, ringId, correlationId);
-        }
-        else if (fileName.Contains("spo2"))
-        {
-            var list = await JsonSerializer.DeserializeAsync<OuraSpO2List>(
-                stream, jsonOptions, ct).ConfigureAwait(false);
-            if (list is not null)
-                foreach (var s in list.Data)
-                {
-                    var evt = OuraNormalizationMapper.MapSpO2Daily(s, ringId, correlationId);
-                    if (evt is not null) yield return evt;
-                }
-        }
-        else
-        {
-            _logger.LogWarning("Oura: Unrecognised export file name '{File}' — skipping.", fileName);
+            await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -351,11 +362,19 @@ public sealed class OuraDriver : IBiometricDriver
                 yield break;
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            var page = await JsonSerializer.DeserializeAsync<TPage>(
-                stream,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                ct).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            TPage? page = null;
+            try
+            {
+                page = await JsonSerializer.DeserializeAsync<TPage>(
+                    stream,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                    ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
 
             if (page is null) yield break;
 
