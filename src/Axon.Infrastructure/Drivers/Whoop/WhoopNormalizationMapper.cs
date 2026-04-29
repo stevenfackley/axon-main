@@ -1,5 +1,4 @@
 using Axon.Core.Domain;
-using Axon.Infrastructure.Drivers;
 
 namespace Axon.Infrastructure.Drivers.Whoop;
 
@@ -29,8 +28,8 @@ namespace Axon.Infrastructure.Drivers.Whoop;
 /// </summary>
 public static class WhoopNormalizationMapper
 {
-    private const string Vendor   = "Whoop";
-    private const float  Confidence = 0.92f;
+    private const string Vendor = "Whoop";
+    private const float Confidence = 0.92f;
 
     // kJ → kcal conversion factor
     private const double KjToKcal = 0.239006;
@@ -45,8 +44,8 @@ public static class WhoopNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapRecovery(
         WhoopRecovery recovery,
-        string        deviceId,
-        string?       correlationId = null)
+        string deviceId,
+        string? correlationId = null)
     {
         var score = recovery.Score;
         if (score is null) yield break;
@@ -82,8 +81,8 @@ public static class WhoopNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapSleep(
         WhoopSleep sleep,
-        string     deviceId,
-        string?    correlationId = null)
+        string deviceId,
+        string? correlationId = null)
     {
         var score = sleep.Score;
         if (score is null) yield break;
@@ -127,8 +126,8 @@ public static class WhoopNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapCycle(
         WhoopCycle cycle,
-        string     deviceId,
-        string?    correlationId = null)
+        string deviceId,
+        string? correlationId = null)
     {
         var score = cycle.Score;
         if (score is null) yield break;
@@ -157,8 +156,8 @@ public static class WhoopNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapWorkout(
         WhoopWorkout workout,
-        string       deviceId,
-        string?      correlationId = null)
+        string deviceId,
+        string? correlationId = null)
     {
         var score = workout.Score;
         if (score is null) yield break;
@@ -186,9 +185,9 @@ public static class WhoopNormalizationMapper
     /// </summary>
     public static BiometricEvent MapBodyWeight(
         WhoopBodyMeasurement body,
-        string               deviceId,
-        DateTimeOffset?      measuredAt    = null,
-        string?              correlationId = null)
+        string deviceId,
+        DateTimeOffset? measuredAt = null,
+        string? correlationId = null)
     {
         var ts = measuredAt ?? DateTimeOffset.UtcNow;
         return Make(deviceId, ts, BiometricType.BodyWeight,
@@ -198,19 +197,19 @@ public static class WhoopNormalizationMapper
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private static BiometricEvent Make(
-        string         deviceId,
+        string deviceId,
         DateTimeOffset timestamp,
-        BiometricType  type,
-        double         value,
-        string         unit,
-        string?        correlationId) =>
+        BiometricType type,
+        double value,
+        string unit,
+        string? correlationId) =>
         new(
-            Id:            DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp:     timestamp,
-            Type:          type,
-            Value:         value,
-            Unit:          unit,
-            Source:        DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
+            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
+            Timestamp: timestamp,
+            Type: type,
+            Value: value,
+            Unit: unit,
+            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
             CorrelationId: correlationId);
 
     private static DateTimeOffset ParseTimestamp(string iso8601)

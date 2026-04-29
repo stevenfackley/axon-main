@@ -22,13 +22,13 @@ namespace Axon.Core.Domain;
 ///     related events emitted in a single sync batch.
 /// </param>
 public sealed record BiometricEvent(
-    Guid            Id,
-    DateTimeOffset  Timestamp,
-    BiometricType   Type,
-    double          Value,
-    string          Unit,
-    SourceMetadata  Source,
-    string?         CorrelationId = null)
+    Guid Id,
+    DateTimeOffset Timestamp,
+    BiometricType Type,
+    double Value,
+    string Unit,
+    SourceMetadata Source,
+    string? CorrelationId = null)
 {
     /// <summary>
     /// PII Shield: suppress raw biometric value and device identity in logs.

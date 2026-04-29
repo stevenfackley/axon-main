@@ -7,12 +7,12 @@ namespace Axon.Infrastructure.Persistence.Entities;
 /// </summary>
 internal sealed class SyncOutboxEntity
 {
-    public Guid    Id                  { get; set; }
-    public Guid    BiometricEventId    { get; set; }
-    public string  CorrelationId       { get; set; }  = string.Empty;
-    public string  SerializedPayload   { get; set; }  = string.Empty;  // AES-256 ciphertext base-64
-    public long    CreatedAtUnixMs     { get; set; }
-    public long?   ProcessedAtUnixMs   { get; set; }
-    public int     RetryCount          { get; set; }
-    public string? LastError           { get; set; }
+    public Guid Id { get; set; }
+    public Guid BiometricEventId { get; set; }
+    public string CorrelationId { get; set; } = string.Empty;
+    public string SerializedPayload { get; set; } = string.Empty;  // AES-256 ciphertext base-64
+    public long CreatedAtUnixMs { get; set; }
+    public long? ProcessedAtUnixMs { get; set; }
+    public int RetryCount { get; set; }
+    public string? LastError { get; set; }
 }

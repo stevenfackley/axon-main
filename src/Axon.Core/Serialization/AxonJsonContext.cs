@@ -23,8 +23,8 @@ namespace Axon.Core.Serialization;
 [JsonSerializable(typeof(BiometricType))]
 [JsonSerializable(typeof(AuditOperation))]
 [JsonSourceGenerationOptions(
-    WriteIndented          = false,
-    PropertyNamingPolicy   = JsonKnownNamingPolicy.CamelCase,
+    WriteIndented = false,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    GenerationMode         = JsonSourceGenerationMode.Serialization | JsonSourceGenerationMode.Metadata)]
+    GenerationMode = JsonSourceGenerationMode.Serialization | JsonSourceGenerationMode.Metadata)]
 public partial class AxonJsonContext : JsonSerializerContext { }

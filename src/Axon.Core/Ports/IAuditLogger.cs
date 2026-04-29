@@ -14,11 +14,11 @@ public interface IAuditLogger
     /// storage synchronously relative to the DB transaction — not fire-and-forget.
     /// </summary>
     ValueTask LogAsync(
-        AuditOperation  operation,
-        string          repositoryName,
-        string          callerIdentity,
-        string?         affectedEntityId,
-        string          summary,
+        AuditOperation operation,
+        string repositoryName,
+        string callerIdentity,
+        string? affectedEntityId,
+        string summary,
         CancellationToken ct = default);
 
     /// <summary>

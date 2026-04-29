@@ -19,11 +19,11 @@ namespace Axon.Infrastructure.Persistence;
 /// </summary>
 public sealed class AxonDbContextFactory(IHardwareVault vault)
 {
-    private const string KeyLabel    = "axon.db.master";
-    private const string DbFileName  = "axon.vault.db";
+    private const string KeyLabel = "axon.db.master";
+    private const string DbFileName = "axon.vault.db";
 
     public async ValueTask<AxonDbContext> CreateAsync(
-        string      dataDirectory,
+        string dataDirectory,
         CancellationToken ct = default)
     {
         // Initialise SQLCipher native library binding
@@ -65,7 +65,7 @@ public sealed class AxonDbContextFactory(IHardwareVault vault)
         for (int i = 0; i < key.Length; i++)
         {
             byte b = key[i];
-            hex[i * 2]     = ToHexChar(b >> 4);
+            hex[i * 2] = ToHexChar(b >> 4);
             hex[i * 2 + 1] = ToHexChar(b & 0xF);
         }
 

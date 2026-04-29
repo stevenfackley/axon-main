@@ -34,9 +34,9 @@ public sealed class GarminDriver : IBiometricDriver
 {
     // ── Identity ──────────────────────────────────────────────────────────────
 
-    public string DriverId    => "garmin";
+    public string DriverId => "garmin";
     public string DisplayName => "Garmin Connect";
-    public bool   SupportsOffline => false; // API mode requires network; import mode is offline
+    public bool SupportsOffline => false; // API mode requires network; import mode is offline
 
     // ── Garmin Health API base URL ────────────────────────────────────────────
     // TODO: Update to production endpoint when Health API access is approved.
@@ -45,21 +45,21 @@ public sealed class GarminDriver : IBiometricDriver
 
     // ── Dependencies ──────────────────────────────────────────────────────────
 
-    private readonly IOAuthTokenStore      _tokenStore;
-    private readonly HttpClient            _http;
-    private readonly GarminDriverOptions   _options;
+    private readonly IOAuthTokenStore _tokenStore;
+    private readonly HttpClient _http;
+    private readonly GarminDriverOptions _options;
     private readonly ILogger<GarminDriver> _logger;
 
     public GarminDriver(
-        IOAuthTokenStore       tokenStore,
-        HttpClient             httpClient,
-        GarminDriverOptions    options,
-        ILogger<GarminDriver>  logger)
+        IOAuthTokenStore tokenStore,
+        HttpClient httpClient,
+        GarminDriverOptions options,
+        ILogger<GarminDriver> logger)
     {
         _tokenStore = tokenStore;
-        _http       = httpClient;
-        _options    = options;
-        _logger     = logger;
+        _http = httpClient;
+        _options = options;
+        _logger = logger;
     }
 
     // ── IBiometricDriver: availability ────────────────────────────────────────
@@ -103,8 +103,8 @@ public sealed class GarminDriver : IBiometricDriver
         }
 
         var correlationId = Guid.NewGuid().ToString("N");
-        var startEpoch    = since.ToUnixTimeSeconds();
-        var endEpoch      = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var startEpoch = since.ToUnixTimeSeconds();
+        var endEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         // ── Daily Summaries ──────────────────────────────────────────────────
         var dailyUrl = $"{ApiBaseUrl}/dailies?uploadStartTimeInSeconds={startEpoch}" +
@@ -169,7 +169,7 @@ public sealed class GarminDriver : IBiometricDriver
     public async IAsyncEnumerable<BiometricEvent> StreamLiveAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var lastFetch    = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var lastFetch = DateTimeOffset.UtcNow.AddMinutes(-10);
         var pollInterval = TimeSpan.FromMinutes(5);
 
         _logger.LogInformation("Garmin: Starting live-poll stream (5-min interval).");
@@ -201,7 +201,7 @@ public sealed class GarminDriver : IBiometricDriver
     /// <param name="correlationId">Optional correlation token.</param>
     /// <param name="ct">Cancellation token.</param>
     public async IAsyncEnumerable<BiometricEvent> ImportFileAsync(
-        string  jsonFilePath,
+        string jsonFilePath,
         string? correlationId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -264,8 +264,8 @@ public sealed class GarminDriver : IBiometricDriver
     // ── HTTP fetch helpers ────────────────────────────────────────────────────
 
     private async IAsyncEnumerable<BiometricEvent> FetchAndMapAsync<TResponse>(
-        string                                    url,
-        OAuthTokenSet                             token,
+        string url,
+        OAuthTokenSet token,
         [EnumeratorCancellation] CancellationToken ct,
         Func<TResponse, IEnumerable<BiometricEvent>> map)
         where TResponse : class

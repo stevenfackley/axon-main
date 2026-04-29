@@ -1,5 +1,4 @@
 using Axon.Core.Domain;
-using Axon.Infrastructure.Drivers;
 
 namespace Axon.Infrastructure.Drivers.Garmin;
 
@@ -31,8 +30,8 @@ namespace Axon.Infrastructure.Drivers.Garmin;
 /// </summary>
 public static class GarminNormalizationMapper
 {
-    private const string Vendor     = "Garmin";
-    private const float  Confidence = 0.90f;
+    private const string Vendor = "Garmin";
+    private const float Confidence = 0.90f;
 
     // ── Daily Summary ─────────────────────────────────────────────────────────
 
@@ -42,10 +41,10 @@ public static class GarminNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapDailySummary(
         GarminDailySummary summary,
-        string?            correlationId = null)
+        string? correlationId = null)
     {
         var deviceId = summary.SummaryId;
-        var ts       = EpochToOffset(summary.StartTimeInSeconds, summary.StartTimeOffsetInSeconds);
+        var ts = EpochToOffset(summary.StartTimeInSeconds, summary.StartTimeOffsetInSeconds);
 
         if (summary.Steps.HasValue)
             yield return Make(deviceId, ts, BiometricType.Steps,
@@ -88,10 +87,10 @@ public static class GarminNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapSleepSummary(
         GarminSleepSummary summary,
-        string?            correlationId = null)
+        string? correlationId = null)
     {
         var deviceId = summary.SummaryId;
-        var ts       = EpochToOffset(summary.StartTimeInSeconds, summary.StartTimeOffsetInSeconds);
+        var ts = EpochToOffset(summary.StartTimeInSeconds, summary.StartTimeOffsetInSeconds);
 
         yield return Make(deviceId, ts, BiometricType.SleepDuration,
             summary.DurationInSeconds, "s", correlationId);
@@ -130,10 +129,10 @@ public static class GarminNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapHrvSummary(
         GarminHrvSummary summary,
-        string?          correlationId = null)
+        string? correlationId = null)
     {
         var deviceId = summary.SummaryId;
-        var baseTs   = EpochToOffset(summary.StartTimeInSeconds, 0);
+        var baseTs = EpochToOffset(summary.StartTimeInSeconds, 0);
 
         if (summary.LastNight?.LastNightAverage.HasValue == true)
             yield return Make(deviceId, baseTs, BiometricType.HeartRateVariability,
@@ -159,10 +158,10 @@ public static class GarminNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapBodyComposition(
         GarminBodyComposition composition,
-        string?               correlationId = null)
+        string? correlationId = null)
     {
         var deviceId = composition.SummaryId;
-        var ts       = EpochToOffset(composition.MeasurementTimeInSeconds,
+        var ts = EpochToOffset(composition.MeasurementTimeInSeconds,
                                      composition.MeasurementTimeOffset);
 
         if (composition.WeightInGrams.HasValue)
@@ -189,19 +188,19 @@ public static class GarminNormalizationMapper
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private static BiometricEvent Make(
-        string         deviceId,
+        string deviceId,
         DateTimeOffset timestamp,
-        BiometricType  type,
-        double         value,
-        string         unit,
-        string?        correlationId) =>
+        BiometricType type,
+        double value,
+        string unit,
+        string? correlationId) =>
         new(
-            Id:            DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp:     timestamp,
-            Type:          type,
-            Value:         value,
-            Unit:          unit,
-            Source:        DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
+            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
+            Timestamp: timestamp,
+            Type: type,
+            Value: value,
+            Unit: unit,
+            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
             CorrelationId: correlationId);
 
     /// <summary>
@@ -210,7 +209,7 @@ public static class GarminNormalizationMapper
     /// </summary>
     private static DateTimeOffset EpochToOffset(long epochSeconds, int offsetSeconds)
     {
-        var utc    = DateTimeOffset.FromUnixTimeSeconds(epochSeconds);
+        var utc = DateTimeOffset.FromUnixTimeSeconds(epochSeconds);
         var offset = TimeSpan.FromSeconds(offsetSeconds);
         return utc.ToOffset(offset);
     }

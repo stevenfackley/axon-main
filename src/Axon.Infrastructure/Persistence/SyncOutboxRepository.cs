@@ -93,7 +93,7 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
             .Where(e => e.Id == entryId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(e => e.RetryCount, e => e.RetryCount + 1)
-                .SetProperty(e => e.LastError,  error), ct)
+                .SetProperty(e => e.LastError, error), ct)
             .ConfigureAwait(false);
     }
 

@@ -41,10 +41,10 @@ public interface IOAuthTokenStore
 /// <param name="ExpiresAt">UTC wall-clock time at which the <see cref="AccessToken"/> expires.</param>
 /// <param name="Scopes">Optional space-separated list of granted OAuth scopes.</param>
 public sealed record OAuthTokenSet(
-    string          AccessToken,
-    string?         RefreshToken,
-    DateTimeOffset  ExpiresAt,
-    string?         Scopes = null)
+    string AccessToken,
+    string? RefreshToken,
+    DateTimeOffset ExpiresAt,
+    string? Scopes = null)
 {
     /// <summary>
     /// Returns <c>true</c> if the access token is expired or within 30 seconds of expiry,

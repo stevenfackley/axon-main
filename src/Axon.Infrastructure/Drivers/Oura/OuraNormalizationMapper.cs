@@ -1,5 +1,4 @@
 using Axon.Core.Domain;
-using Axon.Infrastructure.Drivers;
 
 namespace Axon.Infrastructure.Drivers.Oura;
 
@@ -30,8 +29,8 @@ namespace Axon.Infrastructure.Drivers.Oura;
 /// </summary>
 public static class OuraNormalizationMapper
 {
-    private const string Vendor     = "Oura";
-    private const float  Confidence = 0.93f;
+    private const string Vendor = "Oura";
+    private const float Confidence = 0.93f;
 
     // ── Daily Readiness ───────────────────────────────────────────────────────
 
@@ -41,7 +40,7 @@ public static class OuraNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapDailyReadiness(
         OuraDailyReadiness readiness,
-        string?            correlationId = null)
+        string? correlationId = null)
     {
         var ts = ParseTimestamp(readiness.Timestamp);
         // Use the record ID as device identifier (Oura Ring ID is embedded in each record)
@@ -65,9 +64,9 @@ public static class OuraNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapSleepSession(
         OuraSleepSession session,
-        string?          correlationId = null)
+        string? correlationId = null)
     {
-        var ts       = ParseTimestamp(session.BedtimeStart);
+        var ts = ParseTimestamp(session.BedtimeStart);
         var deviceId = session.Id;
 
         if (session.TotalSleepDuration.HasValue)
@@ -135,9 +134,9 @@ public static class OuraNormalizationMapper
     /// </summary>
     public static IEnumerable<BiometricEvent> MapDailyActivity(
         OuraDailyActivity activity,
-        string?           correlationId = null)
+        string? correlationId = null)
     {
-        var ts       = ParseTimestamp(activity.Timestamp);
+        var ts = ParseTimestamp(activity.Timestamp);
         var deviceId = activity.Id;
 
         if (activity.Steps.HasValue)
@@ -162,10 +161,10 @@ public static class OuraNormalizationMapper
     /// </summary>
     public static BiometricEvent MapHeartRateSample(
         OuraHeartRateSample sample,
-        string              ringId,
-        string?             correlationId = null)
+        string ringId,
+        string? correlationId = null)
     {
-        var ts       = ParseTimestamp(sample.Timestamp);
+        var ts = ParseTimestamp(sample.Timestamp);
         var deviceId = $"{ringId}:{sample.Source}";
 
         return Make(deviceId, ts, BiometricType.HeartRate,
@@ -180,8 +179,8 @@ public static class OuraNormalizationMapper
     /// </summary>
     public static BiometricEvent? MapSpO2Daily(
         OuraSpO2Daily spO2,
-        string        ringId,
-        string?       correlationId = null)
+        string ringId,
+        string? correlationId = null)
     {
         if (spO2.Spo2Percentage?.Average is not { } avg) return null;
 
@@ -203,12 +202,12 @@ public static class OuraNormalizationMapper
     /// </summary>
     private static IEnumerable<BiometricEvent> MapTimeSeries(
         OuraTimeSeries series,
-        string         deviceId,
-        BiometricType  type,
-        string         unit,
-        string?        correlationId)
+        string deviceId,
+        BiometricType type,
+        string unit,
+        string? correlationId)
     {
-        var startTs    = ParseTimestamp(series.Timestamp);
+        var startTs = ParseTimestamp(series.Timestamp);
         var intervalMs = (long)(series.Interval * 1000.0);
 
         for (int i = 0; i < series.Items.Count; i++)
@@ -222,19 +221,19 @@ public static class OuraNormalizationMapper
     }
 
     private static BiometricEvent Make(
-        string         deviceId,
+        string deviceId,
         DateTimeOffset timestamp,
-        BiometricType  type,
-        double         value,
-        string         unit,
-        string?        correlationId) =>
+        BiometricType type,
+        double value,
+        string unit,
+        string? correlationId) =>
         new(
-            Id:            DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp:     timestamp,
-            Type:          type,
-            Value:         value,
-            Unit:          unit,
-            Source:        DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
+            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
+            Timestamp: timestamp,
+            Type: type,
+            Value: value,
+            Unit: unit,
+            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
             CorrelationId: correlationId);
 
     private static DateTimeOffset ParseTimestamp(string iso8601)

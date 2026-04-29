@@ -26,7 +26,7 @@ namespace Axon.Infrastructure.Persistence.Decorators;
 /// </summary>
 public sealed class EncryptionDecorator(
     IBiometricRepository inner,
-    IHardwareVault       vault) : IBiometricRepository, IAsyncDisposable
+    IHardwareVault vault) : IBiometricRepository, IAsyncDisposable
 {
     private const string EncKeyLabel = "axon.field.pii";
 
@@ -75,8 +75,8 @@ public sealed class EncryptionDecorator(
     private static string Encrypt(ReadOnlySpan<byte> key, string plaintext)
     {
         var plaintextBytes = System.Text.Encoding.UTF8.GetBytes(plaintext);
-        var nonce      = new byte[AesGcm.NonceByteSizes.MaxSize];   // 12 bytes
-        var tag        = new byte[AesGcm.TagByteSizes.MaxSize];      // 16 bytes
+        var nonce = new byte[AesGcm.NonceByteSizes.MaxSize];   // 12 bytes
+        var tag = new byte[AesGcm.TagByteSizes.MaxSize];      // 16 bytes
         var ciphertext = new byte[plaintextBytes.Length];
 
         RandomNumberGenerator.Fill(nonce);
@@ -97,9 +97,9 @@ public sealed class EncryptionDecorator(
     /// </summary>
     private static string Decrypt(ReadOnlySpan<byte> key, string blob)
     {
-        var data       = Convert.FromBase64String(blob);
-        var nonce      = data.AsSpan(0,  12);
-        var tag        = data.AsSpan(12, 16);
+        var data = Convert.FromBase64String(blob);
+        var nonce = data.AsSpan(0, 12);
+        var tag = data.AsSpan(12, 16);
         var ciphertext = data.AsSpan(28);
 
         Span<byte> plaintext = stackalloc byte[ciphertext.Length];

@@ -33,9 +33,9 @@ public sealed class WhoopDriver : IBiometricDriver
 {
     // ── Identity ──────────────────────────────────────────────────────────────
 
-    public string DriverId    => "whoop";
+    public string DriverId => "whoop";
     public string DisplayName => "Whoop 4.0";
-    public bool   SupportsOffline => false; // API mode requires network; import mode is offline
+    public bool SupportsOffline => false; // API mode requires network; import mode is offline
 
     // ── Whoop API v1 constants ────────────────────────────────────────────────
     // TODO: Replace with values from https://developer.whoop.com once you have a client.
@@ -44,21 +44,21 @@ public sealed class WhoopDriver : IBiometricDriver
 
     // ── Dependencies ──────────────────────────────────────────────────────────
 
-    private readonly IOAuthTokenStore   _tokenStore;
-    private readonly HttpClient         _http;
+    private readonly IOAuthTokenStore _tokenStore;
+    private readonly HttpClient _http;
     private readonly ILogger<WhoopDriver> _logger;
     private readonly WhoopDriverOptions _options;
 
     public WhoopDriver(
-        IOAuthTokenStore      tokenStore,
-        HttpClient            httpClient,
-        WhoopDriverOptions    options,
-        ILogger<WhoopDriver>  logger)
+        IOAuthTokenStore tokenStore,
+        HttpClient httpClient,
+        WhoopDriverOptions options,
+        ILogger<WhoopDriver> logger)
     {
         _tokenStore = tokenStore;
-        _http       = httpClient;
-        _options    = options;
-        _logger     = logger;
+        _http = httpClient;
+        _options = options;
+        _logger = logger;
     }
 
     // ── IBiometricDriver: availability ────────────────────────────────────────
@@ -105,7 +105,7 @@ public sealed class WhoopDriver : IBiometricDriver
         }
 
         var correlationId = Guid.NewGuid().ToString("N");
-        var deviceId      = _options.DeviceId ?? $"whoop:{_options.ClientId}";
+        var deviceId = _options.DeviceId ?? $"whoop:{_options.ClientId}";
 
         // ── Recovery ────────────────────────────────────────────────────────
         await foreach (var evt in FetchPagedAsync<WhoopRecoveryList>(
@@ -198,7 +198,7 @@ public sealed class WhoopDriver : IBiometricDriver
     /// <param name="correlationId">Optional correlation token to group imported events.</param>
     /// <param name="ct">Cancellation token.</param>
     public async IAsyncEnumerable<BiometricEvent> ImportFileAsync(
-        string  jsonFilePath,
+        string jsonFilePath,
         string? correlationId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -285,11 +285,11 @@ public sealed class WhoopDriver : IBiometricDriver
     // ── Pagination helper ─────────────────────────────────────────────────────
 
     private async IAsyncEnumerable<BiometricEvent> FetchPagedAsync<TPage>(
-        string                              endpoint,
-        DateTimeOffset                      since,
-        OAuthTokenSet                       token,
+        string endpoint,
+        DateTimeOffset since,
+        OAuthTokenSet token,
         [EnumeratorCancellation] CancellationToken ct,
-        Func<TPage, string?>                getNextToken,
+        Func<TPage, string?> getNextToken,
         Func<TPage, IEnumerable<BiometricEvent>> mapPage)
         where TPage : class
     {

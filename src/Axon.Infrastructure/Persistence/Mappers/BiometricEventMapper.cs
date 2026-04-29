@@ -17,30 +17,30 @@ internal static class BiometricEventMapper
 {
     internal static BiometricEventEntity ToEntity(BiometricEvent domain) => new()
     {
-        Id                      = domain.Id,
-        TimestampUnixMs         = domain.Timestamp.ToUnixTimeMilliseconds(),
-        BiometricType           = (byte)domain.Type,
-        Value                   = domain.Value,
-        Unit                    = domain.Unit,
-        DeviceId                = domain.Source.DeviceId,
-        Vendor                  = domain.Source.Vendor,
-        FirmwareVersion         = domain.Source.FirmwareVersion,
-        ConfidenceScore         = domain.Source.ConfidenceScore,
+        Id = domain.Id,
+        TimestampUnixMs = domain.Timestamp.ToUnixTimeMilliseconds(),
+        BiometricType = (byte)domain.Type,
+        Value = domain.Value,
+        Unit = domain.Unit,
+        DeviceId = domain.Source.DeviceId,
+        Vendor = domain.Source.Vendor,
+        FirmwareVersion = domain.Source.FirmwareVersion,
+        ConfidenceScore = domain.Source.ConfidenceScore,
         IngestionTimestampUnixMs = domain.Source.IngestionTimestamp.ToUnixTimeMilliseconds(),
-        CorrelationId           = domain.CorrelationId,
+        CorrelationId = domain.CorrelationId,
     };
 
     internal static BiometricEvent ToDomain(BiometricEventEntity entity) => new(
-        Id:            entity.Id,
-        Timestamp:     DateTimeOffset.FromUnixTimeMilliseconds(entity.TimestampUnixMs),
-        Type:          (BiometricType)entity.BiometricType,
-        Value:         entity.Value,
-        Unit:          entity.Unit,
-        Source:        new SourceMetadata(
-                           DeviceId:           entity.DeviceId,
-                           Vendor:             entity.Vendor,
-                           FirmwareVersion:    entity.FirmwareVersion,
-                           ConfidenceScore:    entity.ConfidenceScore,
+        Id: entity.Id,
+        Timestamp: DateTimeOffset.FromUnixTimeMilliseconds(entity.TimestampUnixMs),
+        Type: (BiometricType)entity.BiometricType,
+        Value: entity.Value,
+        Unit: entity.Unit,
+        Source: new SourceMetadata(
+                           DeviceId: entity.DeviceId,
+                           Vendor: entity.Vendor,
+                           FirmwareVersion: entity.FirmwareVersion,
+                           ConfidenceScore: entity.ConfidenceScore,
                            IngestionTimestamp: DateTimeOffset.FromUnixTimeMilliseconds(
                                                    entity.IngestionTimestampUnixMs)),
         CorrelationId: entity.CorrelationId);

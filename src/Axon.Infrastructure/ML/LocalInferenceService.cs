@@ -75,7 +75,7 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
 
     public LocalInferenceService(ILogger<LocalInferenceService> logger)
     {
-        _logger    = logger;
+        _logger = logger;
         _mlContext = new MLContext(seed: 42);
 
         // Suppress ML.NET's internal console logger — use our structured logger.
@@ -88,7 +88,7 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     public async ValueTask<IReadOnlyList<AnomalyResult>> DetectAnomaliesAsync(
         IReadOnlyList<BiometricEvent> heartRateSamples,
         IReadOnlyList<BiometricEvent> hrvSamples,
-        CancellationToken             ct = default)
+        CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
@@ -101,8 +101,8 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     public async ValueTask<IReadOnlyList<ForecastPoint>> ForecastRecoveryAsync(
         IReadOnlyList<BiometricEvent> sleepHistory,
         IReadOnlyList<BiometricEvent> strainHistory,
-        int                           horizonDays = 7,
-        CancellationToken             ct          = default)
+        int horizonDays = 7,
+        CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
@@ -115,14 +115,14 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     private IReadOnlyList<AnomalyResult> RunSpikeDetection(
         IReadOnlyList<BiometricEvent> hrSamples,
         IReadOnlyList<BiometricEvent> hrvSamples,
-        CancellationToken             ct)
+        CancellationToken ct)
     {
         var results = new List<AnomalyResult>(hrSamples.Count + hrvSamples.Count);
 
         // Process Heart Rate samples
         if (hrSamples.Count >= MinSpikeDetectorSamples)
         {
-            var hrRows   = BuildInputRows(hrSamples);
+            var hrRows = BuildInputRows(hrSamples);
             var hrEngine = GetOrBuildSpikeEngine(
                 ref _hrSpikeEngine,
                 hrSamples,
@@ -142,7 +142,7 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
         // Process HRV samples
         if (hrvSamples.Count >= MinSpikeDetectorSamples)
         {
-            var hrvRows   = BuildInputRows(hrvSamples);
+            var hrvRows = BuildInputRows(hrvSamples);
             var hrvEngine = GetOrBuildSpikeEngine(
                 ref _hrvSpikeEngine,
                 hrvSamples,
@@ -170,9 +170,9 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     /// </summary>
     private PredictionEngine<BiometricInputRow, SpikeOutputRow> GetOrBuildSpikeEngine(
         ref PredictionEngine<BiometricInputRow, SpikeOutputRow>? cachedEngine,
-        IReadOnlyList<BiometricEvent>                             samples,
-        BiometricType                                             metricType,
-        SemaphoreSlim                                             engineLock)
+        IReadOnlyList<BiometricEvent> samples,
+        BiometricType metricType,
+        SemaphoreSlim engineLock)
     {
         // Fast path — engine already built for this metric type.
         if (cachedEngine is not null)
@@ -189,16 +189,16 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
                 metricType, samples.Count);
 
             // Convert to IDataView using explicit row objects (AOT-safe).
-            var rows     = samples.Select(e => new BiometricInputRow { Value = (float)e.Value });
+            var rows = samples.Select(e => new BiometricInputRow { Value = (float)e.Value });
             var dataView = _mlContext.Data.LoadFromEnumerable(rows);
 
             // Build the IID spike estimator pipeline.
             // pvalueHistoryLength: sliding window for p-value computation.
             // side: both tails (detect spikes AND dips).
             var pipeline = _mlContext.Transforms.DetectIidSpike(
-                outputColumnName:    "Prediction",
-                inputColumnName:     "Value",
-                confidence:          AnomalyConfidence * 100.0,   // ML.NET uses 0–100 scale
+                outputColumnName: "Prediction",
+                inputColumnName: "Value",
+                confidence: AnomalyConfidence * 100.0,   // ML.NET uses 0–100 scale
                 pvalueHistoryLength: Math.Min(samples.Count / 2, 512));
 
             var model = pipeline.Fit(dataView);
@@ -214,14 +214,14 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     }
 
     private static AnomalyResult MapSpikeResult(
-        BiometricEvent                              evt,
-        BiometricType                               type,
-        SpikeOutputRow                              output)
+        BiometricEvent evt,
+        BiometricType type,
+        SpikeOutputRow output)
     {
         // ML.NET IidSpike Prediction = [alert, score, p-value]
-        var pred     = output.Prediction;
+        var pred = output.Prediction;
         bool isAlert = pred is { Length: >= 1 } && pred[0] > 0f;
-        double score  = pred is { Length: >= 2 } ? pred[1] : 0.0;
+        double score = pred is { Length: >= 2 } ? pred[1] : 0.0;
         double pValue = pred is { Length: >= 3 } ? pred[2] : 1.0;
 
         return new AnomalyResult(evt.Timestamp, type, isAlert, score, pValue);
@@ -232,8 +232,8 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
     private IReadOnlyList<ForecastPoint> RunRecoveryForecast(
         IReadOnlyList<BiometricEvent> sleepHistory,
         IReadOnlyList<BiometricEvent> strainHistory,
-        int                           horizonDays,
-        CancellationToken             ct)
+        int horizonDays,
+        CancellationToken ct)
     {
         // Compute daily readiness proxy: blend sleep efficiency and inverse strain.
         // Groups events by calendar day and produces a single float per day.
@@ -258,7 +258,7 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
                 "[Inference] Building SSA Recovery Forecaster with {Days} days of history.",
                 dailyReadiness.Count);
 
-            var rows     = dailyReadiness.Values.Select(v => new RecoveryInputRow { ReadinessProxy = v });
+            var rows = dailyReadiness.Values.Select(v => new RecoveryInputRow { ReadinessProxy = v });
             var dataView = _mlContext.Data.LoadFromEnumerable(rows);
 
             // SSA Forecasting pipeline.
@@ -270,46 +270,46 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
             // discountFactor:      recency weighting for adaptive mode.
             // rankSelectionMethod: automatic rank via eigenvalue thresholding.
             var pipeline = _mlContext.Forecasting.ForecastBySsa(
-                outputColumnName:       "Forecast",
-                inputColumnName:        "ReadinessProxy",
-                windowSize:             SsaWindowSize,
-                seriesLength:           dailyReadiness.Count,
-                trainSize:              dailyReadiness.Count,
-                horizon:                horizonDays,
-                isAdaptive:             true,
-                discountFactor:         0.9f,
-                rankSelectionMethod:    RankSelectionMethod.Exact,
-                rank:                   SsaRank,
-                shouldStabilize:        true,
-                confidenceLevel:        0.95f,
+                outputColumnName: "Forecast",
+                inputColumnName: "ReadinessProxy",
+                windowSize: SsaWindowSize,
+                seriesLength: dailyReadiness.Count,
+                trainSize: dailyReadiness.Count,
+                horizon: horizonDays,
+                isAdaptive: true,
+                discountFactor: 0.9f,
+                rankSelectionMethod: RankSelectionMethod.Exact,
+                rank: SsaRank,
+                shouldStabilize: true,
+                confidenceLevel: 0.95f,
                 confidenceLowerBoundColumn: "ConfidenceLowerBound",
                 confidenceUpperBoundColumn: "ConfidenceUpperBound");
 
-            var model  = pipeline.Fit(dataView);
+            var model = pipeline.Fit(dataView);
             _recoveryEngine?.Dispose();
             _recoveryEngine = _mlContext.Model.CreatePredictionEngine<RecoveryInputRow, RecoveryForecastRow>(model);
 
             // Run forecast on an empty input row (SSA is stateful, not conditioned on new inputs).
-            var result     = _recoveryEngine.Predict(new RecoveryInputRow());
-            var forecasts  = result.Forecast           ?? Array.Empty<float>();
-            var lowers     = result.ConfidenceLowerBound ?? Array.Empty<float>();
-            var uppers     = result.ConfidenceUpperBound ?? Array.Empty<float>();
+            var result = _recoveryEngine.Predict(new RecoveryInputRow());
+            var forecasts = result.Forecast ?? Array.Empty<float>();
+            var lowers = result.ConfidenceLowerBound ?? Array.Empty<float>();
+            var uppers = result.ConfidenceUpperBound ?? Array.Empty<float>();
 
             var forecastPoints = new ForecastPoint[forecasts.Length];
-            var baseDate       = DateTimeOffset.UtcNow.Date;
+            var baseDate = DateTimeOffset.UtcNow.Date;
 
             for (int i = 0; i < forecasts.Length; i++)
             {
                 // Clamp predictions to valid readiness range [0, 100].
                 float predicted = Math.Clamp(forecasts[i], 0f, 100f);
-                float lower     = i < lowers.Length ? Math.Clamp(lowers[i], 0f, 100f) : predicted;
-                float upper     = i < uppers.Length ? Math.Clamp(uppers[i], 0f, 100f) : predicted;
+                float lower = i < lowers.Length ? Math.Clamp(lowers[i], 0f, 100f) : predicted;
+                float upper = i < uppers.Length ? Math.Clamp(uppers[i], 0f, 100f) : predicted;
 
                 forecastPoints[i] = new ForecastPoint(
-                    Date:               new DateTimeOffset(baseDate.AddDays(i + 1), TimeSpan.Zero),
+                    Date: new DateTimeOffset(baseDate.AddDays(i + 1), TimeSpan.Zero),
                     PredictedReadiness: predicted,
-                    LowerBound:         lower,
-                    UpperBound:         upper);
+                    LowerBound: lower,
+                    UpperBound: upper);
             }
 
             _logger.LogInformation(
@@ -348,17 +348,17 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
         if (allDays.Count == 0)
             return new SortedDictionary<DateOnly, float>();
 
-        var result       = new SortedDictionary<DateOnly, float>();
-        float lastSleep  = 70f;   // Reasonable defaults if data is missing.
+        var result = new SortedDictionary<DateOnly, float>();
+        float lastSleep = 70f;   // Reasonable defaults if data is missing.
         float lastStrain = 50f;
 
         // Fill every calendar day from first to last (forward-fill gaps).
         var current = allDays[0];
-        var last    = allDays[^1];
+        var last = allDays[^1];
 
         while (current <= last)
         {
-            if (sleepByDay.TryGetValue(current, out var sleep))   lastSleep  = sleep;
+            if (sleepByDay.TryGetValue(current, out var sleep)) lastSleep = sleep;
             if (strainByDay.TryGetValue(current, out var strain)) lastStrain = strain;
 
             // Readiness proxy: sleep efficiency weighted at 60%, recovery from strain at 40%.
@@ -390,7 +390,7 @@ public sealed class LocalInferenceService : IInferenceService, IDisposable
 
     private static IEnumerable<(BiometricEvent Evt, BiometricInputRow Row)> Zip(
         IReadOnlyList<BiometricEvent> events,
-        BiometricInputRow[]           rows)
+        BiometricInputRow[] rows)
     {
         for (int i = 0; i < events.Count; i++)
             yield return (events[i], rows[i]);

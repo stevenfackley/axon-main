@@ -3,13 +3,15 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+#pragma warning disable IDE0005 // Used by net10.0-android target only
 using Avalonia.Platform;
+#pragma warning restore IDE0005
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
-using SkiaSharp;
 using Axon.Core.Ports;
 using Axon.UI.ViewModels;
+using SkiaSharp;
 
 namespace Axon.UI.Rendering;
 
@@ -207,41 +209,41 @@ public sealed class SkiaTelemetryChart : Control
     private sealed class TelemetryDrawOperation : ICustomDrawOperation
     {
         // ── Design tokens ──────────────────────────────────────────────────────
-        private static readonly SKColor AnomalyColor  = new(0xFF, 0x45, 0x45, 0xFF); // Alert red
+        private static readonly SKColor AnomalyColor = new(0xFF, 0x45, 0x45, 0xFF); // Alert red
         private static readonly SKColor GridLineColor = new(0xFF, 0xFF, 0xFF, 0x1A); // 10% white
-        private static readonly SKColor LabelColor    = new(0xFF, 0xFF, 0xFF, 0x80); // 50% white
+        private static readonly SKColor LabelColor = new(0xFF, 0xFF, 0xFF, 0x80); // 50% white
 
         // 1.5px renders as a crisp physical pixel on 2× Retina / 120Hz panels.
-        private const float LineWidth     = 1.5f;
+        private const float LineWidth = 1.5f;
         private const float AnomalyRadius = 4.0f;
-        private const int   GridLineCount = 5;
+        private const int GridLineCount = 5;
 
-        private readonly Rect                         _bounds;
-        private readonly IReadOnlyList<ChartPoint>    _points;
+        private readonly Rect _bounds;
+        private readonly IReadOnlyList<ChartPoint> _points;
         private readonly IReadOnlyList<AnomalyResult> _anomalies;
-        private readonly double                       _minValue;
-        private readonly double                       _maxValue;
-        private readonly float                        _bgAlpha;
-        private readonly float                        _iTime;
+        private readonly double _minValue;
+        private readonly double _maxValue;
+        private readonly float _bgAlpha;
+        private readonly float _iTime;
 
         public Rect Bounds => _bounds;
 
         public TelemetryDrawOperation(
-            Rect                         bounds,
-            IReadOnlyList<ChartPoint>    points,
+            Rect bounds,
+            IReadOnlyList<ChartPoint> points,
             IReadOnlyList<AnomalyResult> anomalies,
-            double                       minValue,
-            double                       maxValue,
-            float                        bgAlpha,
-            float                        iTime)
+            double minValue,
+            double maxValue,
+            float bgAlpha,
+            float iTime)
         {
-            _bounds    = bounds;
-            _points    = points;
+            _bounds = bounds;
+            _points = points;
             _anomalies = anomalies;
-            _minValue  = minValue;
-            _maxValue  = maxValue;
-            _bgAlpha   = bgAlpha;
-            _iTime     = iTime;
+            _minValue = minValue;
+            _maxValue = maxValue;
+            _bgAlpha = bgAlpha;
+            _iTime = iTime;
         }
 
         public bool HitTest(Point p) => _bounds.Contains(p);
@@ -255,8 +257,8 @@ public sealed class SkiaTelemetryChart : Control
             if (!context.TryGetFeature<ISkiaSharpApiLeaseFeature>(out var leaseFeature))
                 return;
 
-            using var lease  = leaseFeature.Lease();
-            var       canvas = lease.SkCanvas;
+            using var lease = leaseFeature.Lease();
+            var canvas = lease.SkCanvas;
 
             float w = (float)_bounds.Width;
             float h = (float)_bounds.Height;
@@ -300,19 +302,19 @@ public sealed class SkiaTelemetryChart : Control
             // Values MUST be set in the same order they are declared in the SKSL source.
             // SkiaSharp 2.x uses string-indexed assignment; not IDisposable.
             var uniforms = new SKRuntimeEffectUniforms(effect);
-            uniforms["iResolution"]     = new[] { w, h };
-            uniforms["iTime"]           = _iTime;
-            uniforms["zone1End"]        = 0.50f;
-            uniforms["zone2End"]        = 0.75f;
-            uniforms["zone3End"]        = 0.90f;
-            uniforms["colorRecovery"]   = ColorToFloat4(0x0D, 0x94, 0x88);
-            uniforms["colorAerobic"]    = ColorToFloat4(0x25, 0x63, 0xEB);
-            uniforms["colorAnaerobic"]  = ColorToFloat4(0xD9, 0x77, 0x06);
-            uniforms["colorRedLine"]    = ColorToFloat4(0xDC, 0x26, 0x26);
+            uniforms["iResolution"] = new[] { w, h };
+            uniforms["iTime"] = _iTime;
+            uniforms["zone1End"] = 0.50f;
+            uniforms["zone2End"] = 0.75f;
+            uniforms["zone3End"] = 0.90f;
+            uniforms["colorRecovery"] = ColorToFloat4(0x0D, 0x94, 0x88);
+            uniforms["colorAerobic"] = ColorToFloat4(0x25, 0x63, 0xEB);
+            uniforms["colorAnaerobic"] = ColorToFloat4(0xD9, 0x77, 0x06);
+            uniforms["colorRedLine"] = ColorToFloat4(0xDC, 0x26, 0x26);
             uniforms["backgroundAlpha"] = _bgAlpha;
 
             using var shader = effect.ToShader(uniforms);
-            using var paint  = new SKPaint { Shader = shader };
+            using var paint = new SKPaint { Shader = shader };
 
             canvas.DrawRect(SKRect.Create(w, h), paint);
         }
@@ -328,16 +330,16 @@ public sealed class SkiaTelemetryChart : Control
         {
             using var linePaint = new SKPaint
             {
-                Color       = GridLineColor,
+                Color = GridLineColor,
                 StrokeWidth = 0.5f,
                 IsAntialias = false,
-                Style       = SKPaintStyle.Stroke
+                Style = SKPaintStyle.Stroke
             };
 
-            using var labelFont  = new SKFont { Size = 11f };
+            using var labelFont = new SKFont { Size = 11f };
             using var labelPaint = new SKPaint
             {
-                Color       = LabelColor,
+                Color = LabelColor,
                 IsAntialias = true
             };
 
@@ -346,8 +348,8 @@ public sealed class SkiaTelemetryChart : Control
             for (int i = 0; i <= GridLineCount; i++)
             {
                 double normalized = (double)i / GridLineCount;
-                float  y          = (float)(normalized * h);
-                double value      = _maxValue - (normalized * valueRange);
+                float y = (float)(normalized * h);
+                double value = _maxValue - (normalized * valueRange);
 
                 canvas.DrawLine(0, y, w, y, linePaint);
 
@@ -374,19 +376,19 @@ public sealed class SkiaTelemetryChart : Control
         /// </summary>
         private void DrawTelemetryLine(SKCanvas canvas, float w, float h)
         {
-            int n           = _points.Count;
+            int n = _points.Count;
             int vertexCount = n * 2;
 
             SKPoint[] positions = ArrayPool<SKPoint>.Shared.Rent(vertexCount);
-            SKColor[] colors    = ArrayPool<SKColor>.Shared.Rent(vertexCount);
+            SKColor[] colors = ArrayPool<SKColor>.Shared.Rent(vertexCount);
 
             try
             {
-                double timeMin  = _points[0].Timestamp.ToUnixTimeMilliseconds();
-                double timeMax  = _points[n - 1].Timestamp.ToUnixTimeMilliseconds();
+                double timeMin = _points[0].Timestamp.ToUnixTimeMilliseconds();
+                double timeMax = _points[n - 1].Timestamp.ToUnixTimeMilliseconds();
                 double timeSpan = Math.Max(timeMax - timeMin, 1.0);
-                double valSpan  = Math.Max(_maxValue - _minValue, 1.0);
-                float  halfLine = LineWidth * 0.5f;
+                double valSpan = Math.Max(_maxValue - _minValue, 1.0);
+                float halfLine = LineWidth * 0.5f;
 
                 for (int i = 0; i < n; i++)
                 {
@@ -398,13 +400,13 @@ public sealed class SkiaTelemetryChart : Control
                     x = Math.Clamp(x, 0f, w);
                     y = Math.Clamp(y, halfLine, h - halfLine);
 
-                    positions[i * 2]     = new SKPoint(x, y - halfLine);
+                    positions[i * 2] = new SKPoint(x, y - halfLine);
                     positions[i * 2 + 1] = new SKPoint(x, y + halfLine);
 
                     // Per-vertex gradient: teal (low HR) → amber (mid) → red (high HR).
                     float t = Math.Clamp((float)((pt.Value - _minValue) / valSpan), 0f, 1f);
                     SKColor c = InterpolateLineColor(t);
-                    colors[i * 2]     = c;
+                    colors[i * 2] = c;
                     colors[i * 2 + 1] = c;
                 }
 
@@ -412,7 +414,7 @@ public sealed class SkiaTelemetryChart : Control
                 var vertices = SKVertices.CreateCopy(
                     SKVertexMode.TriangleStrip,
                     positions[..vertexCount],
-                    texs:   null,
+                    texs: null,
                     colors: colors[..vertexCount]);
 
                 using var paint = new SKPaint { IsAntialias = true };
@@ -421,7 +423,7 @@ public sealed class SkiaTelemetryChart : Control
             finally
             {
                 ArrayPool<SKPoint>.Shared.Return(positions, clearArray: false);
-                ArrayPool<SKColor>.Shared.Return(colors,    clearArray: false);
+                ArrayPool<SKColor>.Shared.Return(colors, clearArray: false);
             }
         }
 
@@ -462,25 +464,25 @@ public sealed class SkiaTelemetryChart : Control
         {
             if (_points.Count < 2) return;
 
-            double timeMin  = _points[0].Timestamp.ToUnixTimeMilliseconds();
-            double timeMax  = _points[^1].Timestamp.ToUnixTimeMilliseconds();
+            double timeMin = _points[0].Timestamp.ToUnixTimeMilliseconds();
+            double timeMax = _points[^1].Timestamp.ToUnixTimeMilliseconds();
             double timeSpan = Math.Max(timeMax - timeMin, 1.0);
-            double valSpan  = Math.Max(_maxValue - _minValue, 1.0);
+            double valSpan = Math.Max(_maxValue - _minValue, 1.0);
 
             using var ringPaint = new SKPaint
             {
-                Color       = AnomalyColor,
+                Color = AnomalyColor,
                 IsAntialias = true,
-                Style       = SKPaintStyle.Stroke,
+                Style = SKPaintStyle.Stroke,
                 StrokeWidth = 1.5f
             };
 
             using var glowPaint = new SKPaint
             {
-                Color      = AnomalyColor.WithAlpha(0x40),
+                Color = AnomalyColor.WithAlpha(0x40),
                 IsAntialias = true,
-                Style       = SKPaintStyle.Fill,
-                MaskFilter  = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f)
+                Style = SKPaintStyle.Fill,
+                MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f)
             };
 
             foreach (var anomaly in _anomalies)
@@ -493,7 +495,7 @@ public sealed class SkiaTelemetryChart : Control
 
                 // Soft glow halo first, then crisp ring on top.
                 canvas.DrawCircle(x, y, AnomalyRadius * 2f, glowPaint);
-                canvas.DrawCircle(x, y, AnomalyRadius,      ringPaint);
+                canvas.DrawCircle(x, y, AnomalyRadius, ringPaint);
             }
         }
 
@@ -504,7 +506,7 @@ public sealed class SkiaTelemetryChart : Control
         private float FindYForTimestamp(DateTimeOffset ts, float h, double valSpan)
         {
             long target = ts.ToUnixTimeMilliseconds();
-            int  lo = 0, hi = _points.Count - 1;
+            int lo = 0, hi = _points.Count - 1;
 
             while (lo < hi)
             {

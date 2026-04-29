@@ -48,7 +48,7 @@ public interface IBiometricDriver
     /// buffering the full payload in memory.
     /// </summary>
     IAsyncEnumerable<BiometricEvent> FetchSinceAsync(
-        DateTimeOffset    since,
+        DateTimeOffset since,
         CancellationToken ct = default);
 
     /// <summary>

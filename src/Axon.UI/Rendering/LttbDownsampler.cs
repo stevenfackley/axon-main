@@ -50,7 +50,7 @@ public static class LttbDownsampler
     /// </returns>
     public static ChartPoint[] Downsample(
         IReadOnlyList<ChartPoint> data,
-        int                       threshold = DefaultThreshold)
+        int threshold = DefaultThreshold)
     {
         if (threshold < 2) threshold = 2;
 
@@ -74,20 +74,20 @@ public static class LttbDownsampler
         // Bucket count = threshold - 2 (excludes the fixed first and last points).
         double every = (double)(dataLength - 2) / (threshold - 2);
 
-        int   sampledIdx = 1;
-        int   a          = 0;   // Index of the previously selected point.
+        int sampledIdx = 1;
+        int a = 0;   // Index of the previously selected point.
 
         for (int i = 0; i < threshold - 2; i++)
         {
             // ── Calculate the average point of the NEXT bucket ────────────────
             // This average acts as the "point C" for the triangle area test.
             int nextBucketStart = (int)Math.Floor((i + 1) * every) + 1;
-            int nextBucketEnd   = (int)Math.Floor((i + 2) * every) + 1;
+            int nextBucketEnd = (int)Math.Floor((i + 2) * every) + 1;
             nextBucketEnd = Math.Min(nextBucketEnd, dataLength);
 
             double avgX = 0.0;
             double avgY = 0.0;
-            int    avgCount = nextBucketEnd - nextBucketStart;
+            int avgCount = nextBucketEnd - nextBucketStart;
 
             for (int j = nextBucketStart; j < nextBucketEnd; j++)
             {
@@ -100,15 +100,15 @@ public static class LttbDownsampler
 
             // ── Find the point in the CURRENT bucket that forms the largest triangle ──
             int currentBucketStart = (int)Math.Floor(i * every) + 1;
-            int currentBucketEnd   = (int)Math.Floor((i + 1) * every) + 1;
+            int currentBucketEnd = (int)Math.Floor((i + 1) * every) + 1;
             currentBucketEnd = Math.Min(currentBucketEnd, dataLength);
 
             // Point A: the previously selected point.
             double ax = data[a].Timestamp.ToUnixTimeMilliseconds();
             double ay = data[a].Value;
 
-            double maxArea    = -1.0;
-            int    maxAreaIdx = currentBucketStart;
+            double maxArea = -1.0;
+            int maxAreaIdx = currentBucketStart;
 
             for (int j = currentBucketStart; j < currentBucketEnd; j++)
             {
@@ -120,11 +120,11 @@ public static class LttbDownsampler
                 // Denominator (/2) is omitted — we only need relative comparison.
                 double area = Math.Abs(
                     (ax - avgX) * (by - ay) -
-                    (ax - bx)   * (avgY - ay));
+                    (ax - bx) * (avgY - ay));
 
                 if (area > maxArea)
                 {
-                    maxArea    = area;
+                    maxArea = area;
                     maxAreaIdx = j;
                 }
             }
@@ -147,8 +147,8 @@ public static class LttbDownsampler
     /// </summary>
     public static async ValueTask<ChartPoint[]> DownsampleAsync(
         IReadOnlyList<ChartPoint> data,
-        int                       threshold = DefaultThreshold,
-        CancellationToken         ct        = default)
+        int threshold = DefaultThreshold,
+        CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 

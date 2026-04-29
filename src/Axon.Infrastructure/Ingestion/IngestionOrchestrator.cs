@@ -19,28 +19,28 @@ namespace Axon.Infrastructure.Ingestion;
 /// </summary>
 public sealed class IngestionOrchestrator : IIngestionOrchestrator
 {
-    private const int ChannelCapacity     = 512;
-    private const int PersistBatchSize    = 64;
+    private const int ChannelCapacity = 512;
+    private const int PersistBatchSize = 64;
     private const int InferenceWindowDays = 30;   // Look-back window fed to inference after ingest.
 
-    private readonly IBiometricRepository          _repository;
-    private readonly IInferenceService             _inference;
+    private readonly IBiometricRepository _repository;
+    private readonly IInferenceService _inference;
     private readonly ILogger<IngestionOrchestrator> _logger;
 
     public IngestionOrchestrator(
-        IBiometricRepository           repository,
-        IInferenceService              inference,
+        IBiometricRepository repository,
+        IInferenceService inference,
         ILogger<IngestionOrchestrator> logger)
     {
         _repository = repository;
-        _inference  = inference;
-        _logger     = logger;
+        _inference = inference;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
     public async ValueTask IngestAsync(
-        IBiometricDriver  driver,
-        DateTimeOffset    since,
+        IBiometricDriver driver,
+        DateTimeOffset since,
         CancellationToken ct = default)
     {
         _logger.LogInformation(
@@ -52,7 +52,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
         {
             SingleWriter = true,
             SingleReader = true,
-            FullMode     = BoundedChannelFullMode.Wait
+            FullMode = BoundedChannelFullMode.Wait
         });
 
         // Producer: drain the driver's lazy async enumerable into the channel.
@@ -75,10 +75,10 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
     // ── Producer ──────────────────────────────────────────────────────────────
 
     private static async Task ProduceAsync(
-        IBiometricDriver              driver,
-        DateTimeOffset                since,
+        IBiometricDriver driver,
+        DateTimeOffset since,
         ChannelWriter<BiometricEvent> writer,
-        CancellationToken             ct)
+        CancellationToken ct)
     {
         try
         {
@@ -95,7 +95,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
 
     private async Task<int> ConsumeAsync(
         ChannelReader<BiometricEvent> reader,
-        CancellationToken             ct)
+        CancellationToken ct)
     {
         int totalCount = 0;
 
@@ -114,7 +114,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
                 {
                     await PersistBatchAsync(batchBuffer, batchCount, ct).ConfigureAwait(false);
                     totalCount += batchCount;
-                    batchCount  = 0;
+                    batchCount = 0;
                 }
             }
 
@@ -145,7 +145,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
     /// </summary>
     private async ValueTask PersistBatchAsync(
         BiometricEvent[] batch,
-        int              count,
+        int count,
         CancellationToken ct)
     {
         // Build a List<BiometricEvent> from the rented array slice (no heap alloc beyond List).
@@ -177,7 +177,7 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
                     driverId);
 
                 var since = DateTimeOffset.UtcNow.AddDays(-InferenceWindowDays);
-                var now   = DateTimeOffset.UtcNow;
+                var now = DateTimeOffset.UtcNow;
 
                 // Pull HR + HRV for spike detection.
                 var hrSamples = await _repository.QueryRangeAsync(

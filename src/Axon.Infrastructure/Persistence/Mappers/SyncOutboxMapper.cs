@@ -10,25 +10,25 @@ internal static class SyncOutboxMapper
 {
     internal static SyncOutboxEntity ToEntity(SyncOutboxEntry domain) => new()
     {
-        Id                = domain.Id,
-        BiometricEventId  = domain.BiometricEventId,
-        CorrelationId     = domain.CorrelationId,
+        Id = domain.Id,
+        BiometricEventId = domain.BiometricEventId,
+        CorrelationId = domain.CorrelationId,
         SerializedPayload = domain.SerializedPayload,
-        CreatedAtUnixMs   = domain.CreatedAt.ToUnixTimeMilliseconds(),
+        CreatedAtUnixMs = domain.CreatedAt.ToUnixTimeMilliseconds(),
         ProcessedAtUnixMs = domain.ProcessedAt?.ToUnixTimeMilliseconds(),
-        RetryCount        = domain.RetryCount,
-        LastError         = domain.LastError,
+        RetryCount = domain.RetryCount,
+        LastError = domain.LastError,
     };
 
     internal static SyncOutboxEntry ToDomain(SyncOutboxEntity entity) => new(
-        Id:                entity.Id,
-        BiometricEventId:  entity.BiometricEventId,
-        CorrelationId:     entity.CorrelationId,
+        Id: entity.Id,
+        BiometricEventId: entity.BiometricEventId,
+        CorrelationId: entity.CorrelationId,
         SerializedPayload: entity.SerializedPayload,
-        CreatedAt:         DateTimeOffset.FromUnixTimeMilliseconds(entity.CreatedAtUnixMs),
-        ProcessedAt:       entity.ProcessedAtUnixMs.HasValue
+        CreatedAt: DateTimeOffset.FromUnixTimeMilliseconds(entity.CreatedAtUnixMs),
+        ProcessedAt: entity.ProcessedAtUnixMs.HasValue
                                ? DateTimeOffset.FromUnixTimeMilliseconds(entity.ProcessedAtUnixMs.Value)
                                : null,
-        RetryCount:        entity.RetryCount,
-        LastError:         entity.LastError);
+        RetryCount: entity.RetryCount,
+        LastError: entity.LastError);
 }

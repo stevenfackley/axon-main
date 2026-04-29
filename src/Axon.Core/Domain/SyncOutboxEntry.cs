@@ -11,14 +11,14 @@ namespace Axon.Core.Domain;
 ///     DB transaction to honour the "No I/O inside a transaction" guardrail.
 /// </summary>
 public sealed record SyncOutboxEntry(
-    Guid            Id,
-    Guid            BiometricEventId,
-    string          CorrelationId,
-    string          SerializedPayload,   // AES-256 ciphertext (base-64)
-    DateTimeOffset  CreatedAt,
+    Guid Id,
+    Guid BiometricEventId,
+    string CorrelationId,
+    string SerializedPayload,   // AES-256 ciphertext (base-64)
+    DateTimeOffset CreatedAt,
     DateTimeOffset? ProcessedAt,
-    int             RetryCount,
-    string?         LastError)
+    int RetryCount,
+    string? LastError)
 {
     /// <summary>PII Shield.</summary>
     public override string ToString() =>

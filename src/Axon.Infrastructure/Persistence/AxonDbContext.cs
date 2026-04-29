@@ -20,8 +20,8 @@ public sealed class AxonDbContext(DbContextOptions<AxonDbContext> options)
     : DbContext(options)
 {
     internal DbSet<BiometricEventEntity> BiometricEvents { get; set; } = null!;
-    internal DbSet<SyncOutboxEntity>     SyncOutbox      { get; set; } = null!;
-    internal DbSet<AuditLogEntity>       AuditLog        { get; set; } = null!;
+    internal DbSet<SyncOutboxEntity> SyncOutbox { get; set; } = null!;
+    internal DbSet<AuditLogEntity> AuditLog { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder mb)
     {

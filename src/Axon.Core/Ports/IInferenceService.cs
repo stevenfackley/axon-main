@@ -30,7 +30,7 @@ public interface IInferenceService
     ValueTask<IReadOnlyList<AnomalyResult>> DetectAnomaliesAsync(
         IReadOnlyList<BiometricEvent> heartRateSamples,
         IReadOnlyList<BiometricEvent> hrvSamples,
-        CancellationToken             ct = default);
+        CancellationToken ct = default);
 
     /// <summary>
     /// Uses the Recovery Forecaster (SSA TimeSeries) to predict the next
@@ -48,8 +48,8 @@ public interface IInferenceService
     ValueTask<IReadOnlyList<ForecastPoint>> ForecastRecoveryAsync(
         IReadOnlyList<BiometricEvent> sleepHistory,
         IReadOnlyList<BiometricEvent> strainHistory,
-        int                           horizonDays = 7,
-        CancellationToken             ct          = default);
+        int horizonDays = 7,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -65,10 +65,10 @@ public interface IInferenceService
 /// </param>
 public sealed record AnomalyResult(
     DateTimeOffset Timestamp,
-    BiometricType  BiometricType,
-    bool           IsAnomaly,
-    double         Score,
-    double         PValue)
+    BiometricType BiometricType,
+    bool IsAnomaly,
+    double Score,
+    double PValue)
 {
     /// <summary>PII Shield: suppress score in logs.</summary>
     public override string ToString() =>
@@ -84,6 +84,6 @@ public sealed record AnomalyResult(
 /// <param name="UpperBound">Upper bound of the 95% prediction interval.</param>
 public sealed record ForecastPoint(
     DateTimeOffset Date,
-    float          PredictedReadiness,
-    float          LowerBound,
-    float          UpperBound);
+    float PredictedReadiness,
+    float LowerBound,
+    float UpperBound);

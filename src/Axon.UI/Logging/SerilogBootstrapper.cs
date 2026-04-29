@@ -29,9 +29,9 @@ internal static class SerilogBootstrapper
         var serilogLogger = new LoggerConfiguration()
             // ── Minimum levels ───────────────────────────────────────────────
             .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft",                LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
-            .MinimumLevel.Override("Avalonia",                 LogEventLevel.Warning)
+            .MinimumLevel.Override("Avalonia", LogEventLevel.Warning)
             // ── Enrichment ───────────────────────────────────────────────────
             .Enrich.FromLogContext()
             .Enrich.WithThreadId()

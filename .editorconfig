@@ -24,3 +24,8 @@ csharp_style_var_when_type_is_apparent = true:suggestion
 # Treat these as errors in CI
 dotnet_diagnostic.CA2007.severity = error          # ConfigureAwait
 dotnet_diagnostic.IDE0005.severity = error         # unnecessary usings
+
+# Tests: CA2007 conflicts with xUnit1030 (tests must NOT ConfigureAwait, lest
+# they bypass xUnit's parallelization limits). xUnit1030 wins inside tests/.
+[tests/**/*.cs]
+dotnet_diagnostic.CA2007.severity = none

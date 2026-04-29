@@ -21,6 +21,6 @@ public interface IIngestionOrchestrator
     /// </summary>
     ValueTask IngestAsync(
         IBiometricDriver driver,
-        DateTimeOffset   since,
+        DateTimeOffset since,
         CancellationToken ct = default);
 }

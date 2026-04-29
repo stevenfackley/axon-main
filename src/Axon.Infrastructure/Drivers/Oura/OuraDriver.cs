@@ -31,9 +31,9 @@ public sealed class OuraDriver : IBiometricDriver
 {
     // ── Identity ──────────────────────────────────────────────────────────────
 
-    public string DriverId    => "oura";
+    public string DriverId => "oura";
     public string DisplayName => "Oura Ring";
-    public bool   SupportsOffline => false; // API mode requires network; import mode is offline
+    public bool SupportsOffline => false; // API mode requires network; import mode is offline
 
     // ── Oura API v2 base URL ──────────────────────────────────────────────────
 
@@ -41,21 +41,21 @@ public sealed class OuraDriver : IBiometricDriver
 
     // ── Dependencies ──────────────────────────────────────────────────────────
 
-    private readonly IOAuthTokenStore    _tokenStore;
-    private readonly HttpClient          _http;
-    private readonly OuraDriverOptions   _options;
+    private readonly IOAuthTokenStore _tokenStore;
+    private readonly HttpClient _http;
+    private readonly OuraDriverOptions _options;
     private readonly ILogger<OuraDriver> _logger;
 
     public OuraDriver(
-        IOAuthTokenStore      tokenStore,
-        HttpClient            httpClient,
-        OuraDriverOptions     options,
-        ILogger<OuraDriver>   logger)
+        IOAuthTokenStore tokenStore,
+        HttpClient httpClient,
+        OuraDriverOptions options,
+        ILogger<OuraDriver> logger)
     {
         _tokenStore = tokenStore;
-        _http       = httpClient;
-        _options    = options;
-        _logger     = logger;
+        _http = httpClient;
+        _options = options;
+        _logger = logger;
     }
 
     // ── IBiometricDriver: availability ────────────────────────────────────────
@@ -111,9 +111,9 @@ public sealed class OuraDriver : IBiometricDriver
         }
 
         var correlationId = Guid.NewGuid().ToString("N");
-        var sinceDate     = since.ToString("yyyy-MM-dd");
-        var todayDate     = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd");
-        var ringId        = _options.RingId ?? "oura-ring";
+        var sinceDate = since.ToString("yyyy-MM-dd");
+        var todayDate = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd");
+        var ringId = _options.RingId ?? "oura-ring";
 
         // ── Daily Readiness ──────────────────────────────────────────────────
         await foreach (var evt in FetchPagedAsync<OuraDailyReadinessList>(
@@ -153,7 +153,7 @@ public sealed class OuraDriver : IBiometricDriver
 
         // ── Continuous Heart Rate ────────────────────────────────────────────
         var sinceIso = since.ToUniversalTime().ToString("O");
-        var nowIso   = DateTimeOffset.UtcNow.ToString("O");
+        var nowIso = DateTimeOffset.UtcNow.ToString("O");
 
         await foreach (var evt in FetchPagedAsync<OuraHeartRateList>(
                            $"{ApiBaseUrl}/heartrate?start_datetime={Uri.EscapeDataString(sinceIso)}" +
@@ -197,7 +197,7 @@ public sealed class OuraDriver : IBiometricDriver
     public async IAsyncEnumerable<BiometricEvent> StreamLiveAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var lastFetch    = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var lastFetch = DateTimeOffset.UtcNow.AddMinutes(-10);
         var pollInterval = TimeSpan.FromMinutes(5);
 
         _logger.LogInformation("Oura: Starting live-poll stream (5-min interval).");
@@ -228,13 +228,13 @@ public sealed class OuraDriver : IBiometricDriver
     /// <param name="correlationId">Optional correlation token.</param>
     /// <param name="ct">Cancellation token.</param>
     public async IAsyncEnumerable<BiometricEvent> ImportFileAsync(
-        string  jsonFilePath,
+        string jsonFilePath,
         string? correlationId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         correlationId ??= Guid.NewGuid().ToString("N");
-        var ringId      = _options.RingId ?? "oura-import";
-        var fileName    = Path.GetFileNameWithoutExtension(jsonFilePath).ToLowerInvariant();
+        var ringId = _options.RingId ?? "oura-import";
+        var fileName = Path.GetFileNameWithoutExtension(jsonFilePath).ToLowerInvariant();
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         _logger.LogInformation("Oura: Importing file {File}", Path.GetFileName(jsonFilePath));
@@ -334,10 +334,10 @@ public sealed class OuraDriver : IBiometricDriver
     // ── Pagination helper ─────────────────────────────────────────────────────
 
     private async IAsyncEnumerable<BiometricEvent> FetchPagedAsync<TPage>(
-        string                              url,
-        string                              accessToken,
+        string url,
+        string accessToken,
         [EnumeratorCancellation] CancellationToken ct,
-        Func<TPage, string?>                getNextToken,
+        Func<TPage, string?> getNextToken,
         Func<TPage, IEnumerable<BiometricEvent>> mapPage)
         where TPage : class
     {

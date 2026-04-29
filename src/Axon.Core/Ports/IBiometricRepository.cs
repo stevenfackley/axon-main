@@ -20,7 +20,7 @@ public interface IBiometricRepository : IRepository<BiometricEvent, Guid>
     /// Results are ordered by <see cref="BiometricEvent.Timestamp"/> ascending.
     /// </summary>
     ValueTask<IReadOnlyList<BiometricEvent>> QueryRangeAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken ct = default);
@@ -30,7 +30,7 @@ public interface IBiometricRepository : IRepository<BiometricEvent, Guid>
     /// large result sets. Used by the LTTB downsampling service for spans > 24 hours.
     /// </summary>
     IAsyncEnumerable<BiometricEvent> StreamRangeAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken ct = default);
@@ -40,10 +40,10 @@ public interface IBiometricRepository : IRepository<BiometricEvent, Guid>
     /// Bucket size is expressed in seconds.
     /// </summary>
     ValueTask<IReadOnlyList<AggregateBucket>> GetAggregatesAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
-        int            bucketSizeSeconds,
+        int bucketSizeSeconds,
         CancellationToken ct = default);
 
     /// <summary>Latest single reading for each <see cref="BiometricType"/>.</summary>
@@ -68,7 +68,7 @@ public interface IBiometricRepository : IRepository<BiometricEvent, Guid>
 /// <param name="SampleCount">Number of raw events aggregated.</param>
 public readonly record struct AggregateBucket(
     DateTimeOffset BucketStart,
-    double         Min,
-    double         Max,
-    double         Avg,
-    int            SampleCount);
+    double Min,
+    double Max,
+    double Avg,
+    int SampleCount);

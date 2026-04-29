@@ -21,8 +21,8 @@ namespace Axon.Infrastructure.Persistence.Decorators;
 /// </summary>
 public sealed class AuditLoggingDecorator(
     IBiometricRepository inner,
-    IAuditLogger         auditLogger,
-    string               callerIdentity) : IBiometricRepository
+    IAuditLogger auditLogger,
+    string callerIdentity) : IBiometricRepository
 {
     private const string RepoName = nameof(IBiometricRepository);
 

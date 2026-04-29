@@ -1,11 +1,11 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 using Axon.Core.Serialization;
 using Axon.Infrastructure.Persistence.Entities;
 using Axon.Infrastructure.Persistence.Mappers;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace Axon.Infrastructure.Persistence;
 
@@ -66,20 +66,20 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     // ── IBiometricRepository ──────────────────────────────────────────────────
 
     public async ValueTask<IReadOnlyList<BiometricEvent>> QueryRangeAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken ct = default)
     {
         long fromMs = from.ToUnixTimeMilliseconds();
-        long toMs   = to.ToUnixTimeMilliseconds();
-        byte typeB  = (byte)type;
+        long toMs = to.ToUnixTimeMilliseconds();
+        byte typeB = (byte)type;
 
         var entities = await db.BiometricEvents
             .AsNoTracking()
             .Where(e => e.BiometricType == typeB
                      && e.TimestampUnixMs >= fromMs
-                     && e.TimestampUnixMs <  toMs)
+                     && e.TimestampUnixMs < toMs)
             .OrderBy(e => e.TimestampUnixMs)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -93,20 +93,20 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     }
 
     public async IAsyncEnumerable<BiometricEvent> StreamRangeAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         long fromMs = from.ToUnixTimeMilliseconds();
-        long toMs   = to.ToUnixTimeMilliseconds();
-        byte typeB  = (byte)type;
+        long toMs = to.ToUnixTimeMilliseconds();
+        byte typeB = (byte)type;
 
         await foreach (var entity in db.BiometricEvents
             .AsNoTracking()
             .Where(e => e.BiometricType == typeB
                      && e.TimestampUnixMs >= fromMs
-                     && e.TimestampUnixMs <  toMs)
+                     && e.TimestampUnixMs < toMs)
             .OrderBy(e => e.TimestampUnixMs)
             .AsAsyncEnumerable()
             .WithCancellation(ct)
@@ -117,16 +117,16 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     }
 
     public async ValueTask<IReadOnlyList<AggregateBucket>> GetAggregatesAsync(
-        BiometricType  type,
+        BiometricType type,
         DateTimeOffset from,
         DateTimeOffset to,
-        int            bucketSizeSeconds,
+        int bucketSizeSeconds,
         CancellationToken ct = default)
     {
-        long fromMs      = from.ToUnixTimeMilliseconds();
-        long toMs        = to.ToUnixTimeMilliseconds();
-        long bucketMs    = (long)bucketSizeSeconds * 1000L;
-        byte typeB       = (byte)type;
+        long fromMs = from.ToUnixTimeMilliseconds();
+        long toMs = to.ToUnixTimeMilliseconds();
+        long bucketMs = (long)bucketSizeSeconds * 1000L;
+        byte typeB = (byte)type;
 
         // SQLite integer arithmetic groups rows into fixed-width time buckets.
         // EF Core translates this to a raw SQL GROUP BY without LINQ overhead.
@@ -134,15 +134,15 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
             .AsNoTracking()
             .Where(e => e.BiometricType == typeB
                      && e.TimestampUnixMs >= fromMs
-                     && e.TimestampUnixMs <  toMs)
+                     && e.TimestampUnixMs < toMs)
             .GroupBy(e => e.TimestampUnixMs / bucketMs * bucketMs)
             .Select(g => new
             {
                 BucketStartMs = g.Key,
-                Min           = g.Min(e => e.Value),
-                Max           = g.Max(e => e.Value),
-                Avg           = g.Average(e => e.Value),
-                Count         = g.Count()
+                Min = g.Min(e => e.Value),
+                Max = g.Max(e => e.Value),
+                Avg = g.Average(e => e.Value),
+                Count = g.Count()
             })
             .OrderBy(g => g.BucketStartMs)
             .ToListAsync(ct)
@@ -154,9 +154,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
             var b = buckets[i];
             result[i] = new AggregateBucket(
                 BucketStart: DateTimeOffset.FromUnixTimeMilliseconds(b.BucketStartMs),
-                Min:         b.Min,
-                Max:         b.Max,
-                Avg:         b.Avg,
+                Min: b.Min,
+                Max: b.Max,
+                Avg: b.Avg,
                 SampleCount: b.Count);
         }
         return result;
@@ -204,12 +204,12 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
             // Write corresponding outbox entry in the SAME unit-of-work
             db.SyncOutbox.Add(new SyncOutboxEntity
             {
-                Id               = Guid.NewGuid(),
+                Id = Guid.NewGuid(),
                 BiometricEventId = evt.Id,
-                CorrelationId    = evt.CorrelationId ?? correlationId,
+                CorrelationId = evt.CorrelationId ?? correlationId,
                 SerializedPayload = payload,   // EncryptionDecorator encrypts this in its layer
-                CreatedAtUnixMs  = now.ToUnixTimeMilliseconds(),
-                RetryCount       = 0,
+                CreatedAtUnixMs = now.ToUnixTimeMilliseconds(),
+                RetryCount = 0,
             });
         }
 

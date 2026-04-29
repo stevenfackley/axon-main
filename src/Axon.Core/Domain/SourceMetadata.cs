@@ -14,10 +14,10 @@ namespace Axon.Core.Domain;
 /// </param>
 /// <param name="IngestionTimestamp">UTC wall-clock time Axon received the raw payload.</param>
 public sealed record SourceMetadata(
-    string  DeviceId,
-    string  Vendor,
+    string DeviceId,
+    string Vendor,
     string? FirmwareVersion,
-    float   ConfidenceScore,
+    float ConfidenceScore,
     DateTimeOffset IngestionTimestamp)
 {
     /// <summary>

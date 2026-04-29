@@ -20,10 +20,10 @@ internal static class DriverUtilities
     /// same <c>Id</c>, enabling idempotent upserts in the persistence layer.
     /// </summary>
     public static Guid DeterministicId(
-        string          vendor,
-        string          deviceId,
-        DateTimeOffset  timestamp,
-        BiometricType   type)
+        string vendor,
+        string deviceId,
+        DateTimeOffset timestamp,
+        BiometricType type)
     {
         var input = $"{vendor}|{deviceId}|{timestamp:O}|{(byte)type}";
         return GuidV5.Create(AxonNamespace, input);
@@ -33,15 +33,15 @@ internal static class DriverUtilities
     /// Builds a <see cref="SourceMetadata"/> record for a vendor driver.
     /// </summary>
     public static SourceMetadata BuildSource(
-        string  vendor,
-        string  deviceId,
-        float   confidenceScore,
+        string vendor,
+        string deviceId,
+        float confidenceScore,
         string? firmwareVersion = null) =>
         new(
-            DeviceId:           deviceId,
-            Vendor:             vendor,
-            FirmwareVersion:    firmwareVersion,
-            ConfidenceScore:    confidenceScore,
+            DeviceId: deviceId,
+            Vendor: vendor,
+            FirmwareVersion: firmwareVersion,
+            ConfidenceScore: confidenceScore,
             IngestionTimestamp: DateTimeOffset.UtcNow);
 }
 
@@ -61,8 +61,8 @@ internal static class GuidV5
         SwapBytes(nsBytes, 6, 7);
 
         var nameBytes = Encoding.UTF8.GetBytes(name);
-        var combined  = new byte[nsBytes.Length + nameBytes.Length];
-        Buffer.BlockCopy(nsBytes,   0, combined, 0,             nsBytes.Length);
+        var combined = new byte[nsBytes.Length + nameBytes.Length];
+        Buffer.BlockCopy(nsBytes, 0, combined, 0, nsBytes.Length);
         Buffer.BlockCopy(nameBytes, 0, combined, nsBytes.Length, nameBytes.Length);
 
         Span<byte> hash = stackalloc byte[20];

@@ -20,22 +20,22 @@ namespace Axon.Infrastructure.Security;
 public sealed class DbAuditLogger(AxonDbContext db) : IAuditLogger
 {
     public async ValueTask LogAsync(
-        AuditOperation  operation,
-        string          repositoryName,
-        string          callerIdentity,
-        string?         affectedEntityId,
-        string          summary,
+        AuditOperation operation,
+        string repositoryName,
+        string callerIdentity,
+        string? affectedEntityId,
+        string summary,
         CancellationToken ct = default)
     {
         var entity = new AuditLogEntity
         {
-            Id               = Guid.NewGuid(),
+            Id = Guid.NewGuid(),
             OccurredAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Operation        = (byte)operation,
-            RepositoryName   = repositoryName,
-            CallerIdentity   = HashIdentity(callerIdentity),
+            Operation = (byte)operation,
+            RepositoryName = repositoryName,
+            CallerIdentity = HashIdentity(callerIdentity),
             AffectedEntityId = affectedEntityId,
-            Summary          = summary,
+            Summary = summary,
         };
 
         db.AuditLog.Add(entity);
@@ -65,7 +65,7 @@ public sealed class DbAuditLogger(AxonDbContext db) : IAuditLogger
     /// </summary>
     private static string HashIdentity(string identity)
     {
-        Span<byte> hash  = stackalloc byte[32];
+        Span<byte> hash = stackalloc byte[32];
         Span<byte> input = stackalloc byte[System.Text.Encoding.UTF8.GetMaxByteCount(identity.Length)];
         int written = System.Text.Encoding.UTF8.GetBytes(identity, input);
         System.Security.Cryptography.SHA256.HashData(input[..written], hash);
