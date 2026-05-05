@@ -1,8 +1,6 @@
 // Android entry point for Axon – only compiled when targeting net9.0-android.
 #if ANDROID
-using Android.App;
 using Android.Content.PM;
-using Avalonia;
 using Avalonia.Android;
 
 namespace Axon.UI.Android;

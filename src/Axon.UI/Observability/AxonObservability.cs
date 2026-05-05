@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+#if !ANDROID && !IOS
 using System.Text.Json;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+#endif
 
 namespace Axon.UI.Observability;
 
