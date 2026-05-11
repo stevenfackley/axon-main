@@ -74,7 +74,7 @@
     <!-- SkiaSharp for direct GPU canvas access in custom render controls -->
     <PackageReference Include="SkiaSharp" Version="3.119.4-preview.1.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.6">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
