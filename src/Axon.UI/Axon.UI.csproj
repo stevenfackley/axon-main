@@ -67,9 +67,9 @@
 
   <ItemGroup>
     <!-- Avalonia UI core (all targets) -->
-    <PackageReference Include="Avalonia" Version="12.0.2" />
+    <PackageReference Include="Avalonia" Version="12.0.3" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.93.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
     <PackageReference Include="Avalonia.Skia" Version="12.0.2" />
     <!-- SkiaSharp for direct GPU canvas access in custom render controls -->
     <PackageReference Include="SkiaSharp" Version="3.119.4-preview.1.1" />
