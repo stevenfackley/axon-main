@@ -10,10 +10,6 @@ updates:
       testing:
         patterns: ["xunit*", "coverlet.*", "Microsoft.NET.Test.*", "NetArchTest.*"]
 
-  - package-ecosystem: npm
-    directory: /
-    schedule: { interval: weekly, day: monday }
-
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly, day: monday }
