@@ -36,11 +36,11 @@
       },
       "Avalonia.Themes.Fluent": {
         "type": "Direct",
-        "requested": "[12.0.3, )",
-        "resolved": "12.0.3",
-        "contentHash": "Acj+gmRm52U8sQIVHk5sCCU65RWjYcurDtxo8zyZSYmM4Vl1z2N9ZLnbK9+wp3N56Z0z/1ddsKYXRq3XfGSP3Q==",
+        "requested": "[12.0.4, )",
+        "resolved": "12.0.4",
+        "contentHash": "SWhg/CGDkQmYspvYHSH7f6OTqhAfdbK5oBpitL1TiGVc/KtslShZeQyW9kLo6vYajJmbjZG01gNGplcmjEyV4g==",
         "dependencies": {
-          "Avalonia": "12.0.3"
+          "Avalonia": "12.0.4"
         }
       },
       "Microsoft.EntityFrameworkCore.Design": {
