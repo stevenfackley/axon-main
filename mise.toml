@@ -1,0 +1,8 @@
+[tasks]
+restore = "dotnet restore"
+build = "dotnet build --no-restore"
+test = "dotnet test --no-build"
+publish = "dotnet publish --no-build --configuration Release"
+
+[env]
+# non-secret config — secrets stay in appsettings/User Secrets
