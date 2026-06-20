@@ -11,22 +11,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IOutboxRelayService _outboxRelayService;
     private readonly IObservabilityController _observabilityController;
+    private readonly WhoopSyncCoordinator _whoop;
 
     internal MainWindowViewModel(
         DashboardViewModel dashboard,
         AnalysisLabViewModel analysisLab,
         IOutboxRelayService outboxRelayService,
-        IObservabilityController observabilityController)
+        IObservabilityController observabilityController,
+        WhoopSyncCoordinator whoop)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
         _outboxRelayService = outboxRelayService;
         _observabilityController = observabilityController;
+        _whoop = whoop;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
         Settings.AirGapChanged += OnAirGapChanged;
         Settings.TelemetryEnabledChanged += OnTelemetryEnabledChanged;
         Settings.TelemetryEnabled = _observabilityController.TelemetryEnabled;
+        Settings.IsWhoopConfigured = _whoop.IsConfigured;
+        Settings.WhoopConnectRequested += OnWhoopConnectRequested;
+        Settings.WhoopSyncRequested += OnWhoopSyncRequested;
 
         ShowDashboardCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Dashboard);
         ShowAnalysisLabCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.AnalysisLab);
@@ -107,6 +113,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Settings.VaultType = "Mock (Dev)";
         Settings.IsHardwareBacked = false;
         Settings.KeyFingerprint = "SEED-AXON";
+
+        if (_whoop.IsConfigured && await _whoop.IsConnectedAsync())
+            Settings.WhoopStatusText = "Connected";
+        else if (!_whoop.IsConfigured)
+            Settings.WhoopStatusText = "Not configured (set WHOOP_API_CLIENT_ID / WHOOP_API_SECRET)";
+
         await Dashboard.InitializeAsync();
         await AnalysisLab.InitializeAsync();
         await _outboxRelayService.StartAsync();
@@ -169,6 +181,57 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         _observabilityController.SetTelemetryEnabled(enabled);
+    }
+
+    private async void OnWhoopConnectRequested(object? sender, EventArgs e)
+    {
+        if (Settings.IsWhoopBusy) return;
+        Settings.IsWhoopBusy = true;
+        Settings.WhoopStatusText = "Opening browser for Whoop consent…";
+        try
+        {
+            await _whoop.ConnectAsync();
+            Settings.WhoopStatusText = "Connected. Syncing…";
+            await RunWhoopSyncAsync();
+        }
+        catch (Exception ex)
+        {
+            Settings.WhoopStatusText = $"Connection failed: {ex.Message}";
+        }
+        finally
+        {
+            Settings.IsWhoopBusy = false;
+        }
+    }
+
+    private async void OnWhoopSyncRequested(object? sender, EventArgs e)
+    {
+        if (Settings.IsWhoopBusy) return;
+        Settings.IsWhoopBusy = true;
+        try
+        {
+            await RunWhoopSyncAsync();
+        }
+        finally
+        {
+            Settings.IsWhoopBusy = false;
+        }
+    }
+
+    private async Task RunWhoopSyncAsync()
+    {
+        Settings.WhoopStatusText = "Syncing Whoop data…";
+        try
+        {
+            await _whoop.SyncNowAsync();
+            // Reload the dashboard so freshly-ingested data appears immediately.
+            await Dashboard.InitializeAsync();
+            Settings.WhoopStatusText = $"Synced at {DateTimeOffset.Now:t}";
+        }
+        catch (Exception ex)
+        {
+            Settings.WhoopStatusText = $"Sync failed: {ex.Message}";
+        }
     }
 
     private void RaiseWorkspaceFlags()

@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
+using Axon.UI.Commands;
 
 namespace Axon.UI.ViewModels;
 
@@ -25,6 +27,25 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     /// <summary>Raised when the user initiates the GDPR key-destruction flow.</summary>
     public event EventHandler? NuclearOptionRequested;
+
+    /// <summary>Raised when the user clicks "Connect Whoop" (interactive OAuth).</summary>
+    public event EventHandler? WhoopConnectRequested;
+
+    /// <summary>Raised when the user clicks "Sync now" for Whoop.</summary>
+    public event EventHandler? WhoopSyncRequested;
+
+    private readonly DelegateCommand _connectWhoopCommand;
+    private readonly DelegateCommand _syncWhoopCommand;
+
+    public SettingsViewModel()
+    {
+        _connectWhoopCommand = new DelegateCommand(
+            () => WhoopConnectRequested?.Invoke(this, EventArgs.Empty),
+            () => IsWhoopConfigured && !IsWhoopBusy);
+        _syncWhoopCommand = new DelegateCommand(
+            () => WhoopSyncRequested?.Invoke(this, EventArgs.Empty),
+            () => IsWhoopConfigured && !IsWhoopBusy);
+    }
 
     // ── Vault info ────────────────────────────────────────────────────────────
 
@@ -110,6 +131,50 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             if (!SetField(ref _telemetryEnabled, value)) return;
             TelemetryEnabledChanged?.Invoke(this, value);
         }
+    }
+
+    // ── Whoop connection ──────────────────────────────────────────────────────
+
+    private bool _isWhoopConfigured;
+    /// <summary>True when Whoop API credentials are present; gates the Connect/Sync buttons.</summary>
+    public bool IsWhoopConfigured
+    {
+        get => _isWhoopConfigured;
+        set
+        {
+            if (!SetField(ref _isWhoopConfigured, value)) return;
+            RaiseWhoopCommandState();
+        }
+    }
+
+    private bool _isWhoopBusy;
+    /// <summary>True while a connect/sync operation is running; disables the buttons.</summary>
+    public bool IsWhoopBusy
+    {
+        get => _isWhoopBusy;
+        set
+        {
+            if (!SetField(ref _isWhoopBusy, value)) return;
+            RaiseWhoopCommandState();
+        }
+    }
+
+    private string _whoopStatusText = "Not connected";
+    /// <summary>Human-readable Whoop connection/sync status for the Settings panel.</summary>
+    public string WhoopStatusText
+    {
+        get => _whoopStatusText;
+        set => SetField(ref _whoopStatusText, value);
+    }
+
+    public ICommand ConnectWhoopCommand => _connectWhoopCommand;
+
+    public ICommand SyncWhoopCommand => _syncWhoopCommand;
+
+    private void RaiseWhoopCommandState()
+    {
+        _connectWhoopCommand.RaiseCanExecuteChanged();
+        _syncWhoopCommand.RaiseCanExecuteChanged();
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
