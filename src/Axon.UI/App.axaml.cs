@@ -1,5 +1,9 @@
+using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Axon.Infrastructure.Configuration;
+using Axon.Infrastructure.Drivers.Whoop;
+using Axon.Infrastructure.Ingestion;
 using Axon.Infrastructure.ML;
 using Axon.Infrastructure.Persistence;
 using Axon.Infrastructure.Security;
@@ -85,8 +89,25 @@ public sealed class App : AvaloniaApp
         var syncTransport = new LoopbackSyncTransport();
         var relayService = new OutboxRelayService(syncOutboxRepository, syncTransport, healthReportWriter);
 
-        var seedDataService = new TelemetrySeedDataService(biometricRepository);
-        seedDataService.EnsureSeedDataAsync().AsTask().GetAwaiter().GetResult();
+        // ── Whoop integration ─────────────────────────────────────────────────
+        // Credentials come from the WHOOP_API_CLIENT_ID / WHOOP_API_SECRET env vars,
+        // optionally seeded from a gitignored .env file found alongside the app/repo.
+        DotEnvFile.Load(FindDotEnv());
+        var whoopClientId = Environment.GetEnvironmentVariable("WHOOP_API_CLIENT_ID") ?? "";
+        var whoopSecret = Environment.GetEnvironmentVariable("WHOOP_API_SECRET") ?? "";
+
+        var whoopHttp = new HttpClient();
+        var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, "tokens"));
+        var whoopOptions = new WhoopDriverOptions { ClientId = whoopClientId, ClientSecret = whoopSecret };
+        var whoopAuthenticator = new WhoopAuthenticator(
+            whoopOptions, whoopHttp, tokenStore, loggerFactory.CreateLogger<WhoopAuthenticator>());
+        var whoopDriver = new WhoopDriver(
+            tokenStore, whoopHttp, whoopOptions, whoopAuthenticator, loggerFactory.CreateLogger<WhoopDriver>());
+        var ingestionOrchestrator = new IngestionOrchestrator(
+            biometricRepository, inferenceService, loggerFactory.CreateLogger<IngestionOrchestrator>());
+        var whoopCoordinator = new WhoopSyncCoordinator(
+            whoopAuthenticator, whoopDriver, ingestionOrchestrator, tokenStore,
+            isConfigured: !string.IsNullOrWhiteSpace(whoopClientId) && !string.IsNullOrWhiteSpace(whoopSecret));
 
         var dashboardFacade = new DashboardDataFacade(
             biometricRepository,
@@ -103,9 +124,28 @@ public sealed class App : AvaloniaApp
 
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
-        var mainWindow = new MainWindowViewModel(dashboard, analysisLab, relayService, observabilityRuntime);
+        var mainWindow = new MainWindowViewModel(
+            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator);
 
-        return new AppRuntime(mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime);
+        return new AppRuntime(
+            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime, whoopHttp);
+    }
+
+    /// <summary>
+    /// Locates a <c>.env</c> file by walking up from the app base directory
+    /// (so a repo-root <c>.env</c> is found during <c>dotnet run</c>). Returns a
+    /// best-effort path; <see cref="DotEnvFile.Load"/> no-ops if it does not exist.
+    /// </summary>
+    private static string FindDotEnv()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, ".env");
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        return Path.Combine(AppContext.BaseDirectory, ".env");
     }
 }
 
@@ -115,7 +155,8 @@ internal sealed class AppRuntime(
     IDisposable dbContext,
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
-    IDisposable observabilityRuntime) : IDisposable
+    IDisposable observabilityRuntime,
+    IDisposable whoopHttp) : IDisposable
 {
     public MainWindowViewModel MainWindowViewModel { get; } = mainWindowViewModel;
 
@@ -124,6 +165,7 @@ internal sealed class AppRuntime(
         relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
         inferenceService.Dispose();
         dbContext.Dispose();
+        whoopHttp.Dispose();
         // Flush and close Serilog sinks (writes any buffered log entries).
         loggerFactory.Dispose();
         observabilityRuntime.Dispose();

@@ -48,16 +48,19 @@ public sealed class WhoopDriver : IBiometricDriver
     private readonly HttpClient _http;
     private readonly ILogger<WhoopDriver> _logger;
     private readonly WhoopDriverOptions _options;
+    private readonly WhoopAuthenticator _authenticator;
 
     public WhoopDriver(
         IOAuthTokenStore tokenStore,
         HttpClient httpClient,
         WhoopDriverOptions options,
+        WhoopAuthenticator authenticator,
         ILogger<WhoopDriver> logger)
     {
         _tokenStore = tokenStore;
         _http = httpClient;
         _options = options;
+        _authenticator = authenticator;
         _logger = logger;
     }
 
@@ -274,12 +277,19 @@ public sealed class WhoopDriver : IBiometricDriver
 
     private async Task<OAuthTokenSet?> RefreshTokenAsync(string refreshToken, CancellationToken ct)
     {
-        // TODO: Implement OAuth2 token refresh once client credentials are available.
-        // POST https://api.prod.whoop.com/oauth/oauth2/token
-        // Body: grant_type=refresh_token&refresh_token={refreshToken}
-        //       &client_id={_options.ClientId}&client_secret={_options.ClientSecret}
-        _logger.LogWarning("Whoop: Token refresh not yet implemented — token expired.");
-        return null;
+        try
+        {
+            var refreshed = await _authenticator.RefreshAsync(refreshToken, ct).ConfigureAwait(false);
+            await _tokenStore.SaveTokenAsync(DriverId, refreshed, ct).ConfigureAwait(false);
+            return refreshed;
+        }
+        catch (Exception ex)
+        {
+            // Refresh can fail if the refresh token was revoked or the network is down.
+            // Surface as "no token" so the caller skips the fetch rather than crashing.
+            _logger.LogWarning(ex, "Whoop: token refresh failed — re-authorization required.");
+            return null;
+        }
     }
 
     // ── Pagination helper ─────────────────────────────────────────────────────
@@ -350,27 +360,17 @@ public sealed class WhoopDriver : IBiometricDriver
 public sealed class WhoopDriverOptions
 {
     /// <summary>
-    /// Whoop OAuth2 client ID from https://developer.whoop.com
-    /// Set via app configuration / secrets manager.
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Whoop OAuth2 client ID from https://developer.whoop.com.
+    /// Loaded from configuration (e.g. the <c>WHOOP_API_CLIENT_ID</c> env var / .env file).
+    /// Empty until configured — <see cref="WhoopDriver.IsAvailableAsync"/> reports unavailable.
     /// </summary>
-    public string ClientId { get; set; } = "WHOOP_CLIENT_ID_PLACEHOLDER";
+    public string ClientId { get; set; } = "";
 
     /// <summary>
-    /// Whoop OAuth2 client secret.
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Whoop OAuth2 client secret (e.g. the <c>WHOOP_API_SECRET</c> env var / .env file).
+    /// Empty until configured. Never log this value.
     /// </summary>
-    public string ClientSecret { get; set; } = "WHOOP_CLIENT_SECRET_PLACEHOLDER";
-
-    /// <summary>
-    /// OAuth2 authorization endpoint for the Whoop developer portal.
-    /// Direct users here to begin the OAuth2 authorization code flow.
-    /// </summary>
-    public string AuthorizationUrl { get; set; } =
-        "https://api.prod.whoop.com/oauth/oauth2/auth" +
-        "?response_type=code" +
-        "&scope=read:recovery%20read:sleep%20read:workout%20read:cycles%20read:body_measurement" +
-        "&client_id=WHOOP_CLIENT_ID_PLACEHOLDER";
+    public string ClientSecret { get; set; } = "";
 
     /// <summary>
     /// Optional logical device ID to use as the source identifier in ACS events.
