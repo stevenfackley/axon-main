@@ -73,6 +73,26 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     /// <summary>Opens the local data folder in the OS file browser.</summary>
     public ICommand OpenDataFolderCommand { get; }
 
+    /// <summary>
+    /// Set by the shell — performs the actual import + persistence + dashboard refresh.
+    /// The View supplies the chosen file paths (it owns the file-picker dialog).
+    /// </summary>
+    public Func<IReadOnlyList<string>, Task>? ImportHandler { get; set; }
+
+    private string _importStatusText = "Import CSV data from any source.";
+    public string ImportStatusText
+    {
+        get => _importStatusText;
+        set => SetField(ref _importStatusText, value);
+    }
+
+    /// <summary>Invoked by the View after the user picks files in the OS dialog.</summary>
+    public async Task RunImportAsync(IReadOnlyList<string> paths)
+    {
+        if (ImportHandler is null || paths.Count == 0) return;
+        await ImportHandler(paths).ConfigureAwait(true);
+    }
+
     // ── Vault info ────────────────────────────────────────────────────────────
 
     private bool _isHardwareBacked;
