@@ -12,7 +12,7 @@
                    FontWeight="Bold"
                    Foreground="#E5E7EB" />
 
-        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="16">
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="16">
             <Border Grid.Row="0" Grid.Column="0" Background="#171827" CornerRadius="14" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="VAULT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
@@ -87,6 +87,23 @@
                     <TextBlock Text="{Binding ImportStatusText}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" TextWrapping="Wrap" />
                     <TextBlock Text="Load a CSV with columns: timestamp, type, value, unit. Unrecognized rows are skipped." Foreground="#94A3B8" TextWrapping="Wrap" />
                     <Button Content="Import CSV…" Click="OnImportClick" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="6" Grid.ColumnSpan="2" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="ABOUT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding AppVersion}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                    <TextBlock Text="How insights are computed" FontSize="12" FontWeight="SemiBold" Foreground="#94A3B8" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding InsightMethodology}" FontSize="12" Foreground="#94A3B8" TextWrapping="Wrap" />
+                    <TextBlock Text="What's new" FontSize="12" FontWeight="SemiBold" Foreground="#94A3B8" Margin="0,6,0,0" />
+                    <ItemsControl ItemsSource="{Binding ChangelogEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="12" Foreground="#B6C2D9" TextWrapping="Wrap" Margin="0,1" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
         </Grid>
