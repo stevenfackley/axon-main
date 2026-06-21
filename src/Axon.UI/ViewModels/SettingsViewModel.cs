@@ -34,6 +34,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     /// <summary>Raised when the user clicks "Sync now" for Whoop.</summary>
     public event EventHandler? WhoopSyncRequested;
 
+    /// <summary>Raised when the user clicks "Open data folder".</summary>
+    public event EventHandler? OpenDataFolderRequested;
+
     private readonly DelegateCommand _connectWhoopCommand;
     private readonly DelegateCommand _syncWhoopCommand;
 
@@ -45,7 +48,30 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _syncWhoopCommand = new DelegateCommand(
             () => WhoopSyncRequested?.Invoke(this, EventArgs.Empty),
             () => IsWhoopConfigured && !IsWhoopBusy);
+        OpenDataFolderCommand = new DelegateCommand(
+            () => OpenDataFolderRequested?.Invoke(this, EventArgs.Empty));
     }
+
+    // ── Data residency (privacy proof) ────────────────────────────────────────
+
+    private string _dataFolderPath = "";
+    /// <summary>Absolute path to the local data directory — shown so users can verify it.</summary>
+    public string DataFolderPath
+    {
+        get => _dataFolderPath;
+        set => SetField(ref _dataFolderPath, value);
+    }
+
+    private string _dataFootprintText = "—";
+    /// <summary>Human-readable size of all local data (e.g. "47.2 MB on this machine").</summary>
+    public string DataFootprintText
+    {
+        get => _dataFootprintText;
+        set => SetField(ref _dataFootprintText, value);
+    }
+
+    /// <summary>Opens the local data folder in the OS file browser.</summary>
+    public ICommand OpenDataFolderCommand { get; }
 
     // ── Vault info ────────────────────────────────────────────────────────────
 
