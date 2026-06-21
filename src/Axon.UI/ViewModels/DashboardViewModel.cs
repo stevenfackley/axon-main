@@ -208,6 +208,17 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
 
     public bool HasAnomalies => _anomalyCount > 0;
 
+    private bool _isEmptyState = true;
+    /// <summary>
+    /// True when there is no biometric data yet — drives the first-run onboarding
+    /// overlay (rec #1). Set after each load.
+    /// </summary>
+    public bool IsEmptyState
+    {
+        get => _isEmptyState;
+        set => SetField(ref _isEmptyState, value);
+    }
+
     // ── Plain-English insight cards (explanation engine, rec #4) ──────────────
 
     private string _anomalyInsightTitle = "Anomaly Detection";
@@ -345,6 +356,8 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             RecoveryForecast = snapshot.RecoveryForecast;
             UpdateInsightCards();
             UpdateTrainingLoad(snapshot.TrainingLoadCtl, snapshot.TrainingLoadAtl, snapshot.TrainingLoadTsb);
+            IsEmptyState = ChartPoints.Count == 0 && HeartRate == 0d && HeartRateVariability == 0d
+                && AnomalyMarkers.Count == 0 && RecoveryForecast.Count == 0;
         }
         catch (OperationCanceledException)
         {
