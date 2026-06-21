@@ -37,6 +37,29 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     /// <summary>Raised when the user clicks "Open data folder".</summary>
     public event EventHandler? OpenDataFolderRequested;
 
+    // ── About / What's New (rec #9 — in-app changelog + methodology) ──────────
+
+    /// <summary>App version string shown in the About card.</summary>
+    public string AppVersion => "Axon 0.1.0 — Alpha";
+
+    /// <summary>Recent notable changes — the in-app changelog (trust/freshness signal).</summary>
+    public IReadOnlyList<string> ChangelogEntries { get; } =
+    [
+        "Live Whoop OAuth sync with encrypted, local-only token storage.",
+        "CSV import for data from any source.",
+        "Local AI insights: anomaly explanations, recovery outlook, CTL/ATL/TSB training load.",
+        "Real air-gap mode — outbound network blocked at the HTTP layer.",
+        "Hardware-backed (DPAPI) encryption with mandatory audit + field encryption.",
+        "Shareable insight cards and a first-run onboarding flow.",
+    ];
+
+    /// <summary>Plain-language methodology / provenance statement for skeptical users.</summary>
+    public string InsightMethodology =>
+        "All analysis runs locally via ML.NET — your biometric data is never sent anywhere. " +
+        "Each insight shows its sample size and confidence so you can judge it, not just trust it. " +
+        "Anomalies are measured against your personal baseline; the recovery outlook blends sleep " +
+        "efficiency and strain; training load uses the standard CTL/ATL/TSB exponentially-weighted averages.";
+
     private readonly DelegateCommand _connectWhoopCommand;
     private readonly DelegateCommand _syncWhoopCommand;
 
