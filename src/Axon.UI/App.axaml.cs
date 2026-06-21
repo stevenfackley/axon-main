@@ -1,6 +1,7 @@
 using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Axon.Core.Licensing;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Configuration;
 using Axon.Infrastructure.Drivers.Whoop;
@@ -141,11 +142,19 @@ public sealed class App : AvaloniaApp
 
         var importCoordinator = new DataImportCoordinator(biometricRepository);
 
+        // License tier: from a validated AXON_LICENSE_KEY, else a dev default.
+        // PRODUCTION must default to LicenseTier.Free once Store billing is wired.
+        var licenseKey = Environment.GetEnvironmentVariable("AXON_LICENSE_KEY");
+        var licenseTier = !string.IsNullOrEmpty(licenseKey) && LicenseKey.TryValidate(licenseKey, out var t)
+            ? t
+            : LicenseTier.Pro;
+        var licenseContext = new LicenseContext(licenseTier);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
         var mainWindow = new MainWindowViewModel(
             dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
-            airGapState, importCoordinator);
+            airGapState, importCoordinator, licenseContext);
 
         // Data-residency proof for the Settings privacy panel.
         mainWindow.Settings.DataFolderPath = dataDirectory;
@@ -154,6 +163,7 @@ public sealed class App : AvaloniaApp
             ? "DPAPI / TPM (Windows)"
             : "Mock (Dev — not hardware-backed)";
         mainWindow.Settings.DataFootprintText = DescribeFootprint(dataDirectory);
+        mainWindow.Settings.LicenseTierText = licenseTier.ToString();
 
         return new AppRuntime(
             mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime,

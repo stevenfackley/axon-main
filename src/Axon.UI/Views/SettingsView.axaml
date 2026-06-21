@@ -24,6 +24,14 @@
 
             <Border Grid.Row="0" Grid.Column="1" Background="#171827" CornerRadius="14" Padding="16">
                 <StackPanel Spacing="8">
+                    <TextBlock Text="LICENSE" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding LicenseTierText}" FontSize="20" FontWeight="SemiBold" Foreground="#00FFC8" />
+                    <TextBlock Text="Free imports &amp; views your data. Pro unlocks automated sync, unlimited history, and the insight engine." Foreground="#94A3B8" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Grid.Column="0" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
                     <TextBlock Text="SYNC" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
                     <TextBlock Text="{Binding PendingOutboxItems}" FontSize="28" FontWeight="Bold" Foreground="#00FFC8" />
                     <TextBlock Text="Pending outbox items" Foreground="#B6C2D9" />
@@ -35,7 +43,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#171827" CornerRadius="14" Padding="16">
+            <Border Grid.Row="1" Grid.Column="1" Background="#171827" CornerRadius="14" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="AIR-GAP" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
                     <ToggleSwitch IsChecked="{Binding AirGapEnabled}" Content="Disable outbound networking" />

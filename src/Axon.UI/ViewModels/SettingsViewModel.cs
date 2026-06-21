@@ -102,6 +102,14 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         set => SetField(ref _isHardwareBacked, value);
     }
 
+    private string _licenseTierText = "Free";
+    /// <summary>Current license tier (Free / Pro / Lifetime).</summary>
+    public string LicenseTierText
+    {
+        get => _licenseTierText;
+        set => SetField(ref _licenseTierText, value);
+    }
+
     private string _vaultType = "Unknown";
     /// <summary>Display name: "TPM 2.0", "Secure Enclave", "Mock (Dev)" etc.</summary>
     public string VaultType
