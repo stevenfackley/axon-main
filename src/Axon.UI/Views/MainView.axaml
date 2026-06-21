@@ -186,6 +186,31 @@
                        Foreground="#FCA5A5" FontSize="13" />
         </Border>
 
+        <!-- ── Insight cards (explanation engine, rec #4) ────────────────── -->
+        <Border Grid.Row="2"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch"
+                Margin="16"
+                Background="#E6141425"
+                BorderBrush="#2D2D4E"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="16"
+                IsVisible="{Binding !IsLoading}">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="{Binding AnomalyInsightTitle}" FontSize="14" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                    <TextBlock Text="{Binding AnomalyInsightDetail}" FontSize="12" Foreground="#B6C2D9" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding AnomalyInsightConfidence}" FontSize="11" Foreground="#6B7280" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="{Binding RecoveryInsightTitle}" FontSize="14" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                    <TextBlock Text="{Binding RecoveryInsightDetail}" FontSize="12" Foreground="#B6C2D9" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding RecoveryInsightConfidence}" FontSize="11" Foreground="#6B7280" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- ── Footer / viewport range ───────────────────────────────────── -->
         <Border Grid.Row="3"
                 Background="#1A1A2E"

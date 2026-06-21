@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Insights;
 using Axon.UI.Application;
 using Axon.UI.Commands;
 
@@ -35,6 +36,7 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
     ];
 
     private readonly IDashboardDataFacade _dashboardDataFacade;
+    private readonly InsightExplanationService _explanations = new();
     private CancellationTokenSource? _loadCts;
     private int _loadVersion;
     private bool _isInitialized;
@@ -206,6 +208,65 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
 
     public bool HasAnomalies => _anomalyCount > 0;
 
+    // ── Plain-English insight cards (explanation engine, rec #4) ──────────────
+
+    private string _anomalyInsightTitle = "Anomaly Detection";
+    public string AnomalyInsightTitle
+    {
+        get => _anomalyInsightTitle;
+        set => SetField(ref _anomalyInsightTitle, value);
+    }
+
+    private string _anomalyInsightDetail = "Connect a source or import data to see insights.";
+    public string AnomalyInsightDetail
+    {
+        get => _anomalyInsightDetail;
+        set => SetField(ref _anomalyInsightDetail, value);
+    }
+
+    private string _anomalyInsightConfidence = "";
+    public string AnomalyInsightConfidence
+    {
+        get => _anomalyInsightConfidence;
+        set => SetField(ref _anomalyInsightConfidence, value);
+    }
+
+    private string _recoveryInsightTitle = "Recovery Outlook";
+    public string RecoveryInsightTitle
+    {
+        get => _recoveryInsightTitle;
+        set => SetField(ref _recoveryInsightTitle, value);
+    }
+
+    private string _recoveryInsightDetail = "A 7-day recovery forecast appears once enough history exists.";
+    public string RecoveryInsightDetail
+    {
+        get => _recoveryInsightDetail;
+        set => SetField(ref _recoveryInsightDetail, value);
+    }
+
+    private string _recoveryInsightConfidence = "";
+    public string RecoveryInsightConfidence
+    {
+        get => _recoveryInsightConfidence;
+        set => SetField(ref _recoveryInsightConfidence, value);
+    }
+
+    private void UpdateInsightCards()
+    {
+        int baselineDays = Math.Max(1, (int)Math.Round((ViewportEnd - ViewportStart).TotalDays));
+
+        var anomaly = _explanations.ExplainAnomalies(AnomalyMarkers, baselineDays);
+        AnomalyInsightTitle = anomaly.Title;
+        AnomalyInsightDetail = anomaly.Detail;
+        AnomalyInsightConfidence = anomaly.Confidence;
+
+        var recovery = _explanations.ExplainForecast(RecoveryForecast, AnomalyMarkers.Count);
+        RecoveryInsightTitle = recovery.Title;
+        RecoveryInsightDetail = recovery.Detail;
+        RecoveryInsightConfidence = recovery.Confidence;
+    }
+
     // ── Loading state ─────────────────────────────────────────────────────────
 
     private bool _isLoading;
@@ -262,6 +323,7 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             AnomalyMarkers = snapshot.Anomalies;
             AnomalyCount = snapshot.Anomalies.Count;
             RecoveryForecast = snapshot.RecoveryForecast;
+            UpdateInsightCards();
         }
         catch (OperationCanceledException)
         {
