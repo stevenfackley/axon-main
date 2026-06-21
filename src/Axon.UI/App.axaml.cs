@@ -1,11 +1,14 @@
 using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Axon.Core.Licensing;
+using Axon.Core.Ports;
 using Axon.Infrastructure.Configuration;
 using Axon.Infrastructure.Drivers.Whoop;
 using Axon.Infrastructure.Ingestion;
 using Axon.Infrastructure.ML;
 using Axon.Infrastructure.Persistence;
+using Axon.Infrastructure.Persistence.Decorators;
 using Axon.Infrastructure.Security;
 using Axon.UI.Application;
 using Axon.UI.ViewModels;
@@ -79,11 +82,23 @@ public sealed class App : AvaloniaApp
         var healthReportWriter = NullHealthReportWriter.Instance;
 #endif
 
-        var vault = new MockHardwareVault();
+        // Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
+        // NOTE: switching vaults changes key derivation — a database created under the
+        // mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
+        var keysDir = Path.Combine(dataDirectory, "keys");
+        Directory.CreateDirectory(keysDir);
+        IHardwareVault vault = OperatingSystem.IsWindows()
+            ? new WindowsDataProtectionVault(keysDir)
+            : new MockHardwareVault();
+
         var dbFactory = new AxonDbContextFactory(vault);
         var db = dbFactory.CreateAsync(dataDirectory).AsTask().GetAwaiter().GetResult();
 
-        var biometricRepository = new BiometricRepository(db);
+        // Mandatory decorator chain (outer → inner): Audit → Encryption → concrete repo.
+        // Every biometric write is AES-256-GCM field-encrypted and audit-logged — no bypass.
+        var encryptedRepository = new EncryptionDecorator(new BiometricRepository(db), vault);
+        IBiometricRepository biometricRepository = new AuditLoggingDecorator(
+            encryptedRepository, new DbAuditLogger(db), callerIdentity: Environment.UserName);
         var syncOutboxRepository = new SyncOutboxRepository(db);
         var inferenceService = new LocalInferenceService(loggerFactory.CreateLogger<LocalInferenceService>());
         var syncTransport = new LoopbackSyncTransport();
@@ -96,7 +111,10 @@ public sealed class App : AvaloniaApp
         var whoopClientId = Environment.GetEnvironmentVariable("WHOOP_API_CLIENT_ID") ?? "";
         var whoopSecret = Environment.GetEnvironmentVariable("WHOOP_API_SECRET") ?? "";
 
-        var whoopHttp = new HttpClient();
+        // Air-gap enforcement: outbound HTTP is physically blocked when the toggle is on.
+        var airGapState = new AirGapState();
+        var whoopHttp = new HttpClient(
+            new AirGapHttpHandler(airGapState) { InnerHandler = new HttpClientHandler() });
         var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, "tokens"));
         var whoopOptions = new WhoopDriverOptions { ClientId = whoopClientId, ClientSecret = whoopSecret };
         var whoopAuthenticator = new WhoopAuthenticator(
@@ -122,13 +140,34 @@ public sealed class App : AvaloniaApp
             new DailyAnalysisBucketStrategy(TimeSpan.FromDays(45), 60 * 60 * 6, "6-hour buckets"),
             new DailyAnalysisBucketStrategy(TimeSpan.MaxValue, 60 * 60 * 24, "1-day buckets"));
 
+        var importCoordinator = new DataImportCoordinator(biometricRepository);
+
+        // License tier: from a validated AXON_LICENSE_KEY, else a dev default.
+        // PRODUCTION must default to LicenseTier.Free once Store billing is wired.
+        var licenseKey = Environment.GetEnvironmentVariable("AXON_LICENSE_KEY");
+        var licenseTier = !string.IsNullOrEmpty(licenseKey) && LicenseKey.TryValidate(licenseKey, out var t)
+            ? t
+            : LicenseTier.Pro;
+        var licenseContext = new LicenseContext(licenseTier);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
         var mainWindow = new MainWindowViewModel(
-            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator);
+            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
+            airGapState, importCoordinator, licenseContext);
+
+        // Data-residency proof for the Settings privacy panel.
+        mainWindow.Settings.DataFolderPath = dataDirectory;
+        mainWindow.Settings.IsHardwareBacked = vault.IsHardwareBacked;
+        mainWindow.Settings.VaultType = vault.IsHardwareBacked
+            ? "DPAPI / TPM (Windows)"
+            : "Mock (Dev — not hardware-backed)";
+        mainWindow.Settings.DataFootprintText = DescribeFootprint(dataDirectory);
+        mainWindow.Settings.LicenseTierText = licenseTier.ToString();
 
         return new AppRuntime(
-            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime, whoopHttp);
+            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime,
+            whoopHttp, encryptedRepository);
     }
 
     /// <summary>
@@ -147,6 +186,27 @@ public sealed class App : AvaloniaApp
         }
         return Path.Combine(AppContext.BaseDirectory, ".env");
     }
+
+    /// <summary>Sums the on-disk size of all local data into a human-readable string.</summary>
+    private static string DescribeFootprint(string dataDirectory)
+    {
+        try
+        {
+            long bytes = 0;
+            foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories))
+                bytes += new FileInfo(file).Length;
+
+            string[] units = ["B", "KB", "MB", "GB"];
+            double size = bytes;
+            int unit = 0;
+            while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
+            return $"{size:0.#} {units[unit]} on this machine";
+        }
+        catch
+        {
+            return "stored on this machine";
+        }
+    }
 }
 
 internal sealed class AppRuntime(
@@ -156,13 +216,16 @@ internal sealed class AppRuntime(
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
     IDisposable observabilityRuntime,
-    IDisposable whoopHttp) : IDisposable
+    IDisposable whoopHttp,
+    IAsyncDisposable repository) : IDisposable
 {
     public MainWindowViewModel MainWindowViewModel { get; } = mainWindowViewModel;
 
     public void Dispose()
     {
         relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        // Zero the cached field-encryption key held by the EncryptionDecorator.
+        repository.DisposeAsync().AsTask().GetAwaiter().GetResult();
         inferenceService.Dispose();
         dbContext.Dispose();
         whoopHttp.Dispose();

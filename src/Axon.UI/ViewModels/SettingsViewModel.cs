@@ -34,6 +34,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     /// <summary>Raised when the user clicks "Sync now" for Whoop.</summary>
     public event EventHandler? WhoopSyncRequested;
 
+    /// <summary>Raised when the user clicks "Open data folder".</summary>
+    public event EventHandler? OpenDataFolderRequested;
+
     private readonly DelegateCommand _connectWhoopCommand;
     private readonly DelegateCommand _syncWhoopCommand;
 
@@ -45,6 +48,49 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _syncWhoopCommand = new DelegateCommand(
             () => WhoopSyncRequested?.Invoke(this, EventArgs.Empty),
             () => IsWhoopConfigured && !IsWhoopBusy);
+        OpenDataFolderCommand = new DelegateCommand(
+            () => OpenDataFolderRequested?.Invoke(this, EventArgs.Empty));
+    }
+
+    // ── Data residency (privacy proof) ────────────────────────────────────────
+
+    private string _dataFolderPath = "";
+    /// <summary>Absolute path to the local data directory — shown so users can verify it.</summary>
+    public string DataFolderPath
+    {
+        get => _dataFolderPath;
+        set => SetField(ref _dataFolderPath, value);
+    }
+
+    private string _dataFootprintText = "—";
+    /// <summary>Human-readable size of all local data (e.g. "47.2 MB on this machine").</summary>
+    public string DataFootprintText
+    {
+        get => _dataFootprintText;
+        set => SetField(ref _dataFootprintText, value);
+    }
+
+    /// <summary>Opens the local data folder in the OS file browser.</summary>
+    public ICommand OpenDataFolderCommand { get; }
+
+    /// <summary>
+    /// Set by the shell — performs the actual import + persistence + dashboard refresh.
+    /// The View supplies the chosen file paths (it owns the file-picker dialog).
+    /// </summary>
+    public Func<IReadOnlyList<string>, Task>? ImportHandler { get; set; }
+
+    private string _importStatusText = "Import CSV data from any source.";
+    public string ImportStatusText
+    {
+        get => _importStatusText;
+        set => SetField(ref _importStatusText, value);
+    }
+
+    /// <summary>Invoked by the View after the user picks files in the OS dialog.</summary>
+    public async Task RunImportAsync(IReadOnlyList<string> paths)
+    {
+        if (ImportHandler is null || paths.Count == 0) return;
+        await ImportHandler(paths).ConfigureAwait(true);
     }
 
     // ── Vault info ────────────────────────────────────────────────────────────
@@ -54,6 +100,14 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     {
         get => _isHardwareBacked;
         set => SetField(ref _isHardwareBacked, value);
+    }
+
+    private string _licenseTierText = "Free";
+    /// <summary>Current license tier (Free / Pro / Lifetime).</summary>
+    public string LicenseTierText
+    {
+        get => _licenseTierText;
+        set => SetField(ref _licenseTierText, value);
     }
 
     private string _vaultType = "Unknown";
