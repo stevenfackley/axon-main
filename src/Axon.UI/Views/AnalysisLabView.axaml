@@ -97,6 +97,39 @@
                        Foreground="White" />
         </Border>
 
+        <!-- ── Custom tag correlations (rec #5) ──────────────────────────── -->
+        <Border Grid.Row="2"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch"
+                Width="340"
+                Margin="0,16,16,16"
+                Background="#E6171827"
+                BorderBrush="#2D2D4E"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="16">
+            <StackPanel Spacing="8">
+                <TextBlock Text="TAG CORRELATIONS" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                <TextBlock Text="{Binding TagStatus}" FontSize="12" Foreground="#94A3B8" TextWrapping="Wrap" />
+                <TextBox Text="{Binding NewTagName}" Watermark="Tag name (e.g. caffeine)" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Tag today" Command="{Binding AddTagTodayCommand}" />
+                    <Button Content="Compute" Command="{Binding ComputeTagCorrelationsCommand}" />
+                </StackPanel>
+                <TextBlock Text="Correlated against the Primary metric over the selected timeframe."
+                           FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" />
+                <ScrollViewer MaxHeight="300">
+                    <ItemsControl ItemsSource="{Binding TagCorrelations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="12" Foreground="#B6C2D9" TextWrapping="Wrap" Margin="0,3" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
         <Border Grid.Row="3"
                 Background="#1A1A2E"
                 BorderBrush="#2D2D4E"

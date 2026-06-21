@@ -150,8 +150,10 @@ public sealed class App : AvaloniaApp
             : LicenseTier.Pro;
         var licenseContext = new LicenseContext(licenseTier);
 
+        var tagRepository = new TagRepository(db);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
-        var analysisLab = new AnalysisLabViewModel(analysisFacade);
+        var analysisLab = new AnalysisLabViewModel(analysisFacade, tagRepository, biometricRepository);
         var mainWindow = new MainWindowViewModel(
             dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
             airGapState, importCoordinator, licenseContext);
