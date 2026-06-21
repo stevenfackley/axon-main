@@ -1,11 +1,13 @@
 using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Axon.Core.Ports;
 using Axon.Infrastructure.Configuration;
 using Axon.Infrastructure.Drivers.Whoop;
 using Axon.Infrastructure.Ingestion;
 using Axon.Infrastructure.ML;
 using Axon.Infrastructure.Persistence;
+using Axon.Infrastructure.Persistence.Decorators;
 using Axon.Infrastructure.Security;
 using Axon.UI.Application;
 using Axon.UI.ViewModels;
@@ -79,11 +81,23 @@ public sealed class App : AvaloniaApp
         var healthReportWriter = NullHealthReportWriter.Instance;
 #endif
 
-        var vault = new MockHardwareVault();
+        // Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
+        // NOTE: switching vaults changes key derivation — a database created under the
+        // mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
+        var keysDir = Path.Combine(dataDirectory, "keys");
+        Directory.CreateDirectory(keysDir);
+        IHardwareVault vault = OperatingSystem.IsWindows()
+            ? new WindowsDataProtectionVault(keysDir)
+            : new MockHardwareVault();
+
         var dbFactory = new AxonDbContextFactory(vault);
         var db = dbFactory.CreateAsync(dataDirectory).AsTask().GetAwaiter().GetResult();
 
-        var biometricRepository = new BiometricRepository(db);
+        // Mandatory decorator chain (outer → inner): Audit → Encryption → concrete repo.
+        // Every biometric write is AES-256-GCM field-encrypted and audit-logged — no bypass.
+        var encryptedRepository = new EncryptionDecorator(new BiometricRepository(db), vault);
+        IBiometricRepository biometricRepository = new AuditLoggingDecorator(
+            encryptedRepository, new DbAuditLogger(db), callerIdentity: Environment.UserName);
         var syncOutboxRepository = new SyncOutboxRepository(db);
         var inferenceService = new LocalInferenceService(loggerFactory.CreateLogger<LocalInferenceService>());
         var syncTransport = new LoopbackSyncTransport();
@@ -128,7 +142,8 @@ public sealed class App : AvaloniaApp
             dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator);
 
         return new AppRuntime(
-            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime, whoopHttp);
+            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime,
+            whoopHttp, encryptedRepository);
     }
 
     /// <summary>
@@ -156,13 +171,16 @@ internal sealed class AppRuntime(
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
     IDisposable observabilityRuntime,
-    IDisposable whoopHttp) : IDisposable
+    IDisposable whoopHttp,
+    IAsyncDisposable repository) : IDisposable
 {
     public MainWindowViewModel MainWindowViewModel { get; } = mainWindowViewModel;
 
     public void Dispose()
     {
         relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        // Zero the cached field-encryption key held by the EncryptionDecorator.
+        repository.DisposeAsync().AsTask().GetAwaiter().GetResult();
         inferenceService.Dispose();
         dbContext.Dispose();
         whoopHttp.Dispose();
