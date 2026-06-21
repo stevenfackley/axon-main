@@ -4,6 +4,7 @@ using System.Windows.Input;
 using Axon.UI.Application;
 using Axon.UI.Commands;
 using Axon.UI.Observability;
+using LicenseContext = Axon.UI.Application.LicenseContext;
 
 namespace Axon.UI.ViewModels;
 
@@ -14,6 +15,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly WhoopSyncCoordinator _whoop;
     private readonly AirGapState _airGapState;
     private readonly DataImportCoordinator _import;
+    private readonly LicenseContext _license;
 
     internal MainWindowViewModel(
         DashboardViewModel dashboard,
@@ -22,7 +24,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IObservabilityController observabilityController,
         WhoopSyncCoordinator whoop,
         AirGapState airGapState,
-        DataImportCoordinator import)
+        DataImportCoordinator import,
+        LicenseContext license)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
@@ -31,6 +34,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _whoop = whoop;
         _airGapState = airGapState;
         _import = import;
+        _license = license;
         Settings.ImportHandler = ImportFilesAsync;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
@@ -193,6 +197,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async void OnWhoopConnectRequested(object? sender, EventArgs e)
     {
         if (Settings.IsWhoopBusy) return;
+        if (!_license.IsAllowed(Axon.Core.Licensing.Feature.ApiSync))
+        {
+            Settings.WhoopStatusText = "Automated Whoop sync is an Axon Pro feature — upgrade to enable it.";
+            return;
+        }
         Settings.IsWhoopBusy = true;
         Settings.WhoopStatusText = "Opening browser for Whoop consent…";
         try
@@ -214,6 +223,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async void OnWhoopSyncRequested(object? sender, EventArgs e)
     {
         if (Settings.IsWhoopBusy) return;
+        if (!_license.IsAllowed(Axon.Core.Licensing.Feature.ApiSync))
+        {
+            Settings.WhoopStatusText = "Automated Whoop sync is an Axon Pro feature — upgrade to enable it.";
+            return;
+        }
         Settings.IsWhoopBusy = true;
         try
         {
