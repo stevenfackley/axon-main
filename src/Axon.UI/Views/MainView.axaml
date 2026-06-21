@@ -198,6 +198,8 @@
                 CornerRadius="14"
                 Padding="16"
                 IsVisible="{Binding !IsLoading}">
+          <StackPanel Spacing="10">
+            <TextBlock Text="{Binding TrainingLoadSummary}" FontSize="12" FontWeight="SemiBold" Foreground="#00FFC8" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
                 <StackPanel Grid.Column="0" Spacing="4">
                     <TextBlock Text="{Binding AnomalyInsightTitle}" FontSize="14" FontWeight="SemiBold" Foreground="#F8FAFC" />
@@ -210,6 +212,7 @@
                     <TextBlock Text="{Binding RecoveryInsightConfidence}" FontSize="11" Foreground="#6B7280" />
                 </StackPanel>
             </Grid>
+          </StackPanel>
         </Border>
 
         <!-- ── Footer / viewport range ───────────────────────────────────── -->

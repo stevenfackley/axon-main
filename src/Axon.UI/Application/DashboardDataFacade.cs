@@ -1,5 +1,6 @@
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Analytics;
 
 namespace Axon.UI.Application;
 
@@ -50,6 +51,7 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
         await Task.WhenAll(anomaliesTask, forecastTask);
 
         var latestVitals = latestVitalsTask.Result;
+        var trainingLoad = ComputeTrainingLoad(strainTask.Result);
         return new DashboardSnapshot(
             HeartRate: GetLatestValue(latestVitals, BiometricType.HeartRate),
             HeartRateVariability: GetLatestValue(latestVitals, BiometricType.HeartRateVariability),
@@ -58,7 +60,30 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
             ReadinessScore: GetLatestValue(latestVitals, BiometricType.ReadinessScore),
             ChartSeries: chartTask.Result,
             Anomalies: anomaliesTask.Result.Where(a => a.IsAnomaly).ToArray(),
-            RecoveryForecast: forecastTask.Result);
+            RecoveryForecast: forecastTask.Result,
+            TrainingLoadCtl: trainingLoad.Ctl,
+            TrainingLoadAtl: trainingLoad.Atl,
+            TrainingLoadTsb: trainingLoad.Tsb);
+    }
+
+    /// <summary>
+    /// Derives the latest CTL/ATL/TSB from the strain history: one load value per
+    /// calendar day (peak strain), oldest-first, fed to the EWMA calculator.
+    /// </summary>
+    private static (double Ctl, double Atl, double Tsb) ComputeTrainingLoad(
+        IReadOnlyList<BiometricEvent> strain)
+    {
+        if (strain.Count == 0) return (0d, 0d, 0d);
+
+        var dailyLoads = strain
+            .GroupBy(e => DateOnly.FromDateTime(e.Timestamp.UtcDateTime))
+            .OrderBy(g => g.Key)
+            .Select(g => (g.Key, g.Max(e => e.Value)))
+            .ToList();
+
+        var series = TrainingLoadCalculator.Calculate(dailyLoads);
+        var latest = series[^1];
+        return (latest.Ctl, latest.Atl, latest.Tsb);
     }
 
     private IChartSeriesStrategy ResolveChartStrategy(TimeSpan span)
