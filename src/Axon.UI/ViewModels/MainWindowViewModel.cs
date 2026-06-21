@@ -12,19 +12,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IOutboxRelayService _outboxRelayService;
     private readonly IObservabilityController _observabilityController;
     private readonly WhoopSyncCoordinator _whoop;
+    private readonly AirGapState _airGapState;
 
     internal MainWindowViewModel(
         DashboardViewModel dashboard,
         AnalysisLabViewModel analysisLab,
         IOutboxRelayService outboxRelayService,
         IObservabilityController observabilityController,
-        WhoopSyncCoordinator whoop)
+        WhoopSyncCoordinator whoop,
+        AirGapState airGapState)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
         _outboxRelayService = outboxRelayService;
         _observabilityController = observabilityController;
         _whoop = whoop;
+        _airGapState = airGapState;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
         Settings.AirGapChanged += OnAirGapChanged;
@@ -33,6 +36,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Settings.IsWhoopConfigured = _whoop.IsConfigured;
         Settings.WhoopConnectRequested += OnWhoopConnectRequested;
         Settings.WhoopSyncRequested += OnWhoopSyncRequested;
+        Settings.OpenDataFolderRequested += OnOpenDataFolderRequested;
 
         ShowDashboardCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Dashboard);
         ShowAnalysisLabCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.AnalysisLab);
@@ -76,6 +80,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 Settings.AirGapEnabled = value;
             }
 
+            // Enforce at the HTTP boundary (blocks outbound) and on the sync relay.
+            _airGapState.Enabled = value;
             _outboxRelayService.SetAirGapEnabled(value);
             SyncStatus = value ? SyncStatus.AirGapped : SyncStatus.Idle;
         }
@@ -110,10 +116,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task InitializeAsync()
     {
-        Settings.VaultType = "Mock (Dev)";
-        Settings.IsHardwareBacked = false;
-        Settings.KeyFingerprint = "SEED-AXON";
-
+        // Vault type / footprint / data path are populated from the composition root.
         if (_whoop.IsConfigured && await _whoop.IsConnectedAsync())
             Settings.WhoopStatusText = "Connected";
         else if (!_whoop.IsConfigured)
@@ -215,6 +218,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         finally
         {
             Settings.IsWhoopBusy = false;
+        }
+    }
+
+    private void OnOpenDataFolderRequested(object? sender, EventArgs e)
+    {
+        var path = Settings.DataFolderPath;
+        if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Opening the file browser is best-effort; never crash the UI over it.
         }
     }
 

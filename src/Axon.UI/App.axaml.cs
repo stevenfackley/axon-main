@@ -110,7 +110,10 @@ public sealed class App : AvaloniaApp
         var whoopClientId = Environment.GetEnvironmentVariable("WHOOP_API_CLIENT_ID") ?? "";
         var whoopSecret = Environment.GetEnvironmentVariable("WHOOP_API_SECRET") ?? "";
 
-        var whoopHttp = new HttpClient();
+        // Air-gap enforcement: outbound HTTP is physically blocked when the toggle is on.
+        var airGapState = new AirGapState();
+        var whoopHttp = new HttpClient(
+            new AirGapHttpHandler(airGapState) { InnerHandler = new HttpClientHandler() });
         var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, "tokens"));
         var whoopOptions = new WhoopDriverOptions { ClientId = whoopClientId, ClientSecret = whoopSecret };
         var whoopAuthenticator = new WhoopAuthenticator(
@@ -139,7 +142,15 @@ public sealed class App : AvaloniaApp
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
         var mainWindow = new MainWindowViewModel(
-            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator);
+            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator, airGapState);
+
+        // Data-residency proof for the Settings privacy panel.
+        mainWindow.Settings.DataFolderPath = dataDirectory;
+        mainWindow.Settings.IsHardwareBacked = vault.IsHardwareBacked;
+        mainWindow.Settings.VaultType = vault.IsHardwareBacked
+            ? "DPAPI / TPM (Windows)"
+            : "Mock (Dev — not hardware-backed)";
+        mainWindow.Settings.DataFootprintText = DescribeFootprint(dataDirectory);
 
         return new AppRuntime(
             mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime,
@@ -161,6 +172,27 @@ public sealed class App : AvaloniaApp
             dir = dir.Parent;
         }
         return Path.Combine(AppContext.BaseDirectory, ".env");
+    }
+
+    /// <summary>Sums the on-disk size of all local data into a human-readable string.</summary>
+    private static string DescribeFootprint(string dataDirectory)
+    {
+        try
+        {
+            long bytes = 0;
+            foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories))
+                bytes += new FileInfo(file).Length;
+
+            string[] units = ["B", "KB", "MB", "GB"];
+            double size = bytes;
+            int unit = 0;
+            while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
+            return $"{size:0.#} {units[unit]} on this machine";
+        }
+        catch
+        {
+            return "stored on this machine";
+        }
     }
 }
 
