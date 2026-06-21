@@ -102,6 +102,46 @@
         <Grid Grid.Row="1">
             <Panel IsVisible="{Binding IsDashboardActive}">
                 <views:MainView DataContext="{ReflectionBinding Dashboard}" />
+
+                <!-- ── First-run onboarding overlay (rec #1) ─────────────────── -->
+                <Border IsVisible="{Binding Dashboard.IsEmptyState}"
+                        Background="#F20F0F1A"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch">
+                    <Border Background="#171827"
+                            BorderBrush="#2D2D4E"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            Padding="40,32"
+                            MaxWidth="560"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="Welcome to Axon"
+                                       FontSize="26" FontWeight="Bold" Foreground="#F8FAFC" />
+                            <TextBlock Text="Your private, offline biometric lab. Bring your wearable data into one place, run local AI analysis, and keep full ownership — no account, no cloud."
+                                       FontSize="14" Foreground="#B6C2D9" TextWrapping="Wrap" />
+                            <TextBlock Text="Get your first insight in two steps:"
+                                       FontSize="13" FontWeight="SemiBold" Foreground="#94A3B8" Margin="0,6,0,0" />
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="1.  Connect Whoop, or import a CSV of past data"
+                                           FontSize="13" Foreground="#B6C2D9" />
+                                <TextBlock Text="2.  Axon builds your baseline and surfaces anomalies + a recovery outlook"
+                                           FontSize="13" Foreground="#B6C2D9" />
+                            </StackPanel>
+                            <Button Content="Connect a source or import data →"
+                                    Command="{Binding ShowSettingsCommand}"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,10,0,0"
+                                    Padding="16,10"
+                                    Background="#00B894"
+                                    Foreground="#0F0F1A"
+                                    FontWeight="SemiBold" />
+                            <TextBlock Text="Everything stays on this machine. You can export or wipe it any time."
+                                       FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </Border>
             </Panel>
             <Panel IsVisible="{Binding IsAnalysisLabActive}">
                 <views:AnalysisLabView DataContext="{ReflectionBinding AnalysisLab}" />
