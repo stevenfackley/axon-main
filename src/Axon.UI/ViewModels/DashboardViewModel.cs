@@ -252,6 +252,26 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
         set => SetField(ref _recoveryInsightConfidence, value);
     }
 
+    private string _trainingLoadSummary = "Training load (CTL/ATL/TSB) builds as strain data accumulates.";
+    /// <summary>Compact TrainingPeaks-style fitness/fatigue/form summary (rec #6).</summary>
+    public string TrainingLoadSummary
+    {
+        get => _trainingLoadSummary;
+        set => SetField(ref _trainingLoadSummary, value);
+    }
+
+    private void UpdateTrainingLoad(double ctl, double atl, double tsb)
+    {
+        if (ctl == 0d && atl == 0d)
+        {
+            TrainingLoadSummary = "Training load (CTL/ATL/TSB) builds as strain data accumulates.";
+            return;
+        }
+        string form = tsb >= 5 ? "Fresh" : tsb <= -5 ? "Fatigued" : "Neutral";
+        TrainingLoadSummary =
+            $"Form: {form}  ·  Fitness (CTL) {ctl:F0}  ·  Fatigue (ATL) {atl:F0}  ·  Balance (TSB) {tsb:+0;-0;0}";
+    }
+
     private void UpdateInsightCards()
     {
         int baselineDays = Math.Max(1, (int)Math.Round((ViewportEnd - ViewportStart).TotalDays));
@@ -324,6 +344,7 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             AnomalyCount = snapshot.Anomalies.Count;
             RecoveryForecast = snapshot.RecoveryForecast;
             UpdateInsightCards();
+            UpdateTrainingLoad(snapshot.TrainingLoadCtl, snapshot.TrainingLoadAtl, snapshot.TrainingLoadTsb);
         }
         catch (OperationCanceledException)
         {

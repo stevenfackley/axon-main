@@ -10,4 +10,7 @@ internal sealed record DashboardSnapshot(
     double ReadinessScore,
     ChartSeriesResult ChartSeries,
     IReadOnlyList<AnomalyResult> Anomalies,
-    IReadOnlyList<ForecastPoint> RecoveryForecast);
+    IReadOnlyList<ForecastPoint> RecoveryForecast,
+    double TrainingLoadCtl,
+    double TrainingLoadAtl,
+    double TrainingLoadTsb);
