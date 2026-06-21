@@ -41,6 +41,8 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.*" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.*" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.*" />
+    <!-- Windows DPAPI for WindowsDataProtectionVault -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.*" />
     <!-- ML.NET: core + time-series catalog for IID Spike + SSA Forecasting -->
     <!-- Note: ML.NET uses dynamic code generation internally; PublishAot is set to
          false for inference-heavy builds. For strict AOT targets use ONNX export. -->

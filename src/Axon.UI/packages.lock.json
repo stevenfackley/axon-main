@@ -748,6 +748,11 @@
         "resolved": "9.0.4",
         "contentHash": "ynVvqELpMWGQJ1Y90rlAmuTiSQIkXD0W5AMj7pVpEjECmrcIJLexIBblgccerHFijayfcsl1KCbkk+Sg5cS9vQ=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "9.0.17",
+        "contentHash": "J5CJzVWdl0wXCM9A0LYGyBLgclMsGFXcszDOiLZW97y7tn4u9DoQKMF8LIuWGgXi/gKbFtzGV2L5+Xaw4nX0Ag=="
+      },
       "axon.core": {
         "type": "Project"
       },
@@ -765,7 +770,8 @@
           "Serilog.Enrichers.Thread": "[4.*, )",
           "Serilog.Extensions.Logging": "[9.*, )",
           "Serilog.Sinks.Console": "[6.*, )",
-          "Serilog.Sinks.File": "[6.*, )"
+          "Serilog.Sinks.File": "[6.*, )",
+          "System.Security.Cryptography.ProtectedData": "[9.*, )"
         }
       }
     },
@@ -1621,6 +1627,11 @@
         "resolved": "9.0.4",
         "contentHash": "ynVvqELpMWGQJ1Y90rlAmuTiSQIkXD0W5AMj7pVpEjECmrcIJLexIBblgccerHFijayfcsl1KCbkk+Sg5cS9vQ=="
       },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Transitive",
+        "resolved": "9.0.17",
+        "contentHash": "J5CJzVWdl0wXCM9A0LYGyBLgclMsGFXcszDOiLZW97y7tn4u9DoQKMF8LIuWGgXi/gKbFtzGV2L5+Xaw4nX0Ag=="
+      },
       "Xamarin.AndroidX.Activity": {
         "type": "Transitive",
         "resolved": "1.12.4.1",
@@ -2279,7 +2290,8 @@
           "Serilog.Enrichers.Thread": "[4.*, )",
           "Serilog.Extensions.Logging": "[9.*, )",
           "Serilog.Sinks.Console": "[6.*, )",
-          "Serilog.Sinks.File": "[6.*, )"
+          "Serilog.Sinks.File": "[6.*, )",
+          "System.Security.Cryptography.ProtectedData": "[9.*, )"
         }
       }
     },
