@@ -148,6 +148,7 @@
                     <Button Content="Zoom In" Command="{Binding ZoomInCommand}" />
                     <Button Content="Zoom Out" Command="{Binding ZoomOutCommand}" />
                     <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+                    <Button Content="Share" Click="OnShareInsightClick" />
                 </StackPanel>
             </Grid>
         </Border>
