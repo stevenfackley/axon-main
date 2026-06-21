@@ -73,10 +73,9 @@ public sealed class WhoopDriver : IBiometricDriver
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Whoop uses OAuth2 Authorization Code flow.
-    /// Direct the user to <see cref="WhoopDriverOptions.AuthorizationUrl"/> in a browser,
-    /// then exchange the returned code for tokens using your backend or local callback server.
-    /// This method validates that a valid stored token is available;
+    /// Whoop uses the OAuth2 authorization-code flow; the interactive browser
+    /// consent + token exchange is handled by <see cref="WhoopAuthenticator"/>.
+    /// This method only validates that a valid stored token is available;
     /// it does NOT launch a browser.
     /// </remarks>
     public async ValueTask AuthoriseAsync(CancellationToken ct = default)
