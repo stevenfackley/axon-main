@@ -13,6 +13,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IObservabilityController _observabilityController;
     private readonly WhoopSyncCoordinator _whoop;
     private readonly AirGapState _airGapState;
+    private readonly DataImportCoordinator _import;
 
     internal MainWindowViewModel(
         DashboardViewModel dashboard,
@@ -20,7 +21,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IOutboxRelayService outboxRelayService,
         IObservabilityController observabilityController,
         WhoopSyncCoordinator whoop,
-        AirGapState airGapState)
+        AirGapState airGapState,
+        DataImportCoordinator import)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
@@ -28,6 +30,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _observabilityController = observabilityController;
         _whoop = whoop;
         _airGapState = airGapState;
+        _import = import;
+        Settings.ImportHandler = ImportFilesAsync;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
         Settings.AirGapChanged += OnAirGapChanged;
@@ -218,6 +222,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         finally
         {
             Settings.IsWhoopBusy = false;
+        }
+    }
+
+    private async Task ImportFilesAsync(IReadOnlyList<string> paths)
+    {
+        Settings.ImportStatusText = "Importing…";
+        int total = 0;
+        try
+        {
+            foreach (var path in paths)
+                total += await _import.ImportCsvAsync(path);
+
+            // Reload the dashboard so imported data appears immediately.
+            await Dashboard.InitializeAsync();
+            Settings.ImportStatusText = total > 0
+                ? $"Imported {total} events. Dashboard updated."
+                : "No valid rows found in the selected file(s).";
+        }
+        catch (Exception ex)
+        {
+            Settings.ImportStatusText = $"Import failed: {ex.Message}";
         }
     }
 

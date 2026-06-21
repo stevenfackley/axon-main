@@ -12,7 +12,7 @@
                    FontWeight="Bold"
                    Foreground="#E5E7EB" />
 
-        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="16">
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="16">
             <Border Grid.Row="0" Grid.Column="0" Background="#171827" CornerRadius="14" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="VAULT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
@@ -70,6 +70,15 @@
                     <TextBlock Text="No account. No cloud. Your biometric data never leaves this machine." Foreground="#B6C2D9" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding DataFolderPath}" FontSize="12" Foreground="#94A3B8" TextWrapping="Wrap" />
                     <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="5" Grid.ColumnSpan="2" Background="#171827" CornerRadius="14" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="IMPORT" FontSize="10" Foreground="#6B7280" LetterSpacing="1.5" />
+                    <TextBlock Text="{Binding ImportStatusText}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" TextWrapping="Wrap" />
+                    <TextBlock Text="Load a CSV with columns: timestamp, type, value, unit. Unrecognized rows are skipped." Foreground="#94A3B8" TextWrapping="Wrap" />
+                    <Button Content="Import CSV…" Click="OnImportClick" Margin="0,4,0,0" />
                 </StackPanel>
             </Border>
         </Grid>

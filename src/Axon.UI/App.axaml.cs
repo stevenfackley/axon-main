@@ -139,10 +139,13 @@ public sealed class App : AvaloniaApp
             new DailyAnalysisBucketStrategy(TimeSpan.FromDays(45), 60 * 60 * 6, "6-hour buckets"),
             new DailyAnalysisBucketStrategy(TimeSpan.MaxValue, 60 * 60 * 24, "1-day buckets"));
 
+        var importCoordinator = new DataImportCoordinator(biometricRepository);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade);
         var mainWindow = new MainWindowViewModel(
-            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator, airGapState);
+            dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
+            airGapState, importCoordinator);
 
         // Data-residency proof for the Settings privacy panel.
         mainWindow.Settings.DataFolderPath = dataDirectory;
