@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Axon.Core.Domain;
+using Axon.Core.Ports;
+using Axon.Infrastructure.Analytics;
 using Axon.UI.Application;
 using Axon.UI.Commands;
 
@@ -29,12 +31,20 @@ public sealed class AnalysisLabViewModel : INotifyPropertyChanged
     ];
 
     private readonly IAnalysisLabFacade _analysisLabFacade;
+    private readonly ITagRepository _tagRepository;
+    private readonly IBiometricRepository _biometricRepository;
+    private readonly TagCorrelationAnalyzer _tagAnalyzer = new();
     private CancellationTokenSource? _loadCts;
     private bool _isInitialized;
 
-    internal AnalysisLabViewModel(IAnalysisLabFacade analysisLabFacade)
+    internal AnalysisLabViewModel(
+        IAnalysisLabFacade analysisLabFacade,
+        ITagRepository tagRepository,
+        IBiometricRepository biometricRepository)
     {
         _analysisLabFacade = analysisLabFacade;
+        _tagRepository = tagRepository;
+        _biometricRepository = biometricRepository;
         AvailableMetrics = MetricOptions;
         AvailableTimeframes = Timeframes;
 
@@ -43,6 +53,8 @@ public sealed class AnalysisLabViewModel : INotifyPropertyChanged
         _selectedTimeframe = Timeframes[1];
 
         RefreshCommand = new AsyncCommand(RefreshAsync, () => !IsLoading);
+        AddTagTodayCommand = new AsyncCommand(AddTagTodayAsync);
+        ComputeTagCorrelationsCommand = new AsyncCommand(ComputeTagCorrelationsAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -147,6 +159,96 @@ public sealed class AnalysisLabViewModel : INotifyPropertyChanged
     {
         get => _errorMessage;
         set => SetField(ref _errorMessage, value);
+    }
+
+    // ── Custom tags + correlation (rec #5) ────────────────────────────────────
+
+    public ICommand AddTagTodayCommand { get; }
+
+    public ICommand ComputeTagCorrelationsCommand { get; }
+
+    private string _newTagName = "";
+    /// <summary>The tag name the user is about to record (e.g. "caffeine", "alcohol").</summary>
+    public string NewTagName
+    {
+        get => _newTagName;
+        set => SetField(ref _newTagName, value);
+    }
+
+    private string _tagStatus = "Tag days (caffeine, alcohol, travel…), then correlate against the primary metric.";
+    public string TagStatus
+    {
+        get => _tagStatus;
+        set => SetField(ref _tagStatus, value);
+    }
+
+    private IReadOnlyList<string> _tagCorrelations = Array.Empty<string>();
+    /// <summary>Ranked tag-correlation result lines for display.</summary>
+    public IReadOnlyList<string> TagCorrelations
+    {
+        get => _tagCorrelations;
+        set => SetField(ref _tagCorrelations, value);
+    }
+
+    private async Task AddTagTodayAsync()
+    {
+        var name = NewTagName.Trim();
+        if (name.Length == 0) return;
+
+        try
+        {
+            var tags = await _tagRepository.GetTagsAsync();
+            var tag = tags.FirstOrDefault(
+                t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (tag is null)
+            {
+                tag = new Tag(Guid.NewGuid(), name, "custom");
+                await _tagRepository.AddTagAsync(tag);
+            }
+
+            await _tagRepository.AddAnnotationAsync(
+                new TagAnnotation(tag.Id, DateTimeOffset.UtcNow, Value: null, Note: null));
+
+            TagStatus = $"Tagged today as '{name}'. Tag more days, then Compute correlations.";
+            NewTagName = "";
+        }
+        catch (Exception ex)
+        {
+            TagStatus = $"Could not save tag: {ex.Message}";
+        }
+    }
+
+    private async Task ComputeTagCorrelationsAsync()
+    {
+        try
+        {
+            var to = DateTimeOffset.UtcNow;
+            var from = to - SelectedTimeframe.Span;
+
+            var tags = await _tagRepository.GetTagsAsync();
+            var annotations = await _tagRepository.GetAnnotationsAsync(from, to);
+            var events = await _biometricRepository.QueryRangeAsync(PrimaryMetric.Type, from, to);
+
+            var daily = events
+                .GroupBy(e => DateOnly.FromDateTime(e.Timestamp.UtcDateTime))
+                .OrderBy(g => g.Key)
+                .Select(g => (g.Key, g.Average(e => e.Value)))
+                .ToList();
+
+            var results = _tagAnalyzer.Analyze(annotations, daily, tags);
+
+            TagCorrelations = results.Count == 0
+                ? ["No correlations yet — tag several days and make sure the primary metric has data in this window."]
+                : results.Select(r =>
+                    $"{r.TagName}: {r.Strength} — {PrimaryMetric.Label} is {r.EffectSize:+0.0;-0.0} on tagged days " +
+                    $"(r={r.Coefficient:0.00}, n={r.SampleSize})").ToArray();
+
+            TagStatus = $"Analyzed {tags.Count} tag(s) against {PrimaryMetric.Label} over {SelectedTimeframe.Label}.";
+        }
+        catch (Exception ex)
+        {
+            TagStatus = $"Correlation failed: {ex.Message}";
+        }
     }
 
     public async Task InitializeAsync()

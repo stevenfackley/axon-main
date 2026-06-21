@@ -22,6 +22,8 @@ public sealed class AxonDbContext(DbContextOptions<AxonDbContext> options)
     internal DbSet<BiometricEventEntity> BiometricEvents { get; set; } = null!;
     internal DbSet<SyncOutboxEntity> SyncOutbox { get; set; } = null!;
     internal DbSet<AuditLogEntity> AuditLog { get; set; } = null!;
+    internal DbSet<TagEntity> Tags { get; set; } = null!;
+    internal DbSet<TagAnnotationEntity> TagAnnotations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -117,6 +119,33 @@ public sealed class AxonDbContext(DbContextOptions<AxonDbContext> options)
              .HasDatabaseName("IX_AuditLog_EntityId");
             e.HasIndex(x => x.OccurredAtUnixMs)
              .HasDatabaseName("IX_AuditLog_OccurredAt");
+        });
+
+        // ── Tags ──────────────────────────────────────────────────────────────
+        mb.Entity<TagEntity>(e =>
+        {
+            e.ToTable("Tags");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnType("TEXT").IsRequired();
+            e.Property(x => x.Name).HasColumnType("TEXT").HasMaxLength(64).IsRequired();
+            e.Property(x => x.Category).HasColumnType("TEXT").HasMaxLength(32).IsRequired();
+            e.HasIndex(x => x.Name).HasDatabaseName("IX_Tags_Name");
+        });
+
+        // ── TagAnnotations ────────────────────────────────────────────────────
+        mb.Entity<TagAnnotationEntity>(e =>
+        {
+            e.ToTable("TagAnnotations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnType("TEXT").IsRequired();
+            e.Property(x => x.TagId).HasColumnType("TEXT").IsRequired();
+            e.Property(x => x.TimestampUnixMs).HasColumnName("TimestampMs").HasColumnType("INTEGER").IsRequired();
+            e.Property(x => x.Value).HasColumnType("REAL");
+            e.Property(x => x.Note).HasColumnType("TEXT").HasMaxLength(512);
+
+            // Range queries by time, and lookups by tag.
+            e.HasIndex(x => x.TimestampUnixMs).HasDatabaseName("IX_TagAnnotations_Timestamp");
+            e.HasIndex(x => x.TagId).HasDatabaseName("IX_TagAnnotations_TagId");
         });
     }
 }
