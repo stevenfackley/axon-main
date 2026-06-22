@@ -141,9 +141,9 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
-        "requested": "[9.*, )",
-        "resolved": "9.0.17",
-        "contentHash": "J5CJzVWdl0wXCM9A0LYGyBLgclMsGFXcszDOiLZW97y7tn4u9DoQKMF8LIuWGgXi/gKbFtzGV2L5+Xaw4nX0Ag=="
+        "requested": "[10.*, )",
+        "resolved": "10.0.9",
+        "contentHash": "vXp+vBQbTkMrDzUiPCxo1KvzfaAvZWuSRS2P7e5orhtV7ZuePKAB3Cqc9dH2YHUavRJyA2uWd2yrL6hl2VoJ5g=="
       },
       "Humanizer.Core": {
         "type": "Transitive",
