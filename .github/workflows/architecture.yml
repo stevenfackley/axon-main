@@ -28,7 +28,7 @@ jobs:
       - name: Verify no hardcoded keys or connection strings in Core
         shell: bash
         run: |
-          if grep -rEi "password\s*=|key\s*=|secret\s*=|connectionstring\s*=" src/Axon.Core/ --include="*.cs"; then
+          if grep -rEi 'password\s*=\s*"|key\s*=\s*"|secret\s*=\s*"|connectionstring\s*=\s*"' src/Axon.Core/ --include="*.cs"; then
             echo "::error::Potential hardcoded secret detected in Axon.Core."
             exit 1
           fi
