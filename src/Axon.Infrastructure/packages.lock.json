@@ -36,15 +36,15 @@
       },
       "Microsoft.EntityFrameworkCore.Sqlite": {
         "type": "Direct",
-        "requested": "[10.0.9, )",
-        "resolved": "10.0.9",
-        "contentHash": "HH9/nnRF/YmRrc3hUlgXjMBYKH5kFmd5UWC81l9U0ySQhwHTcgvDPSewB8DyQHzFJzNGgG7VFK6ynC6+XQz9WA==",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "kzg9MuQNJvZQxAU+piSkEzc7/1tpW6n1nVSGGMObu2GgxLK8Nf+6fvZundaznTZ+O2KhfPZ8HFNCzMH3PWDUmA==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore.Sqlite.Core": "10.0.9",
-          "Microsoft.Extensions.Caching.Memory": "10.0.9",
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.9",
-          "Microsoft.Extensions.DependencyModel": "10.0.9",
-          "Microsoft.Extensions.Logging": "10.0.9",
+          "Microsoft.EntityFrameworkCore.Sqlite.Core": "10.0.10",
+          "Microsoft.Extensions.Caching.Memory": "10.0.10",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+          "Microsoft.Extensions.DependencyModel": "10.0.10",
+          "Microsoft.Extensions.Logging": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.11",
           "SQLitePCLRaw.core": "2.1.11"
         }
@@ -227,8 +227,8 @@
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "iZrONyMKPjxfVZnUktqO30QjzNwAGH+AxM61s8lKQnVhgbQ3bn0hiXI129ZmVicEbIcwljyy2OVsIYUR51ZHKQ==",
+        "resolved": "10.0.10",
+        "contentHash": "TPCs0ldm7AWqcKmp6f/Xr+14sat7hx4rHfRlS4RgCURBH2thEWbAKEyX7cCWr63zVJVOJIJZTg2cBiUXa8ys6g==",
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.11"
         }
@@ -245,26 +245,26 @@
       },
       "Microsoft.EntityFrameworkCore.Relational": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "dEoyYKgiaZHHgOFm1WMWm1sFEsEuhPWufX4L9PekKtqd/RaIcPjkCjvbrVvJtApErb5wPSJhYvnTlxhH+p9h2g==",
+        "resolved": "10.0.10",
+        "contentHash": "wNonj40aZxia+GtuBiiD6ZqVh4h6y5Nje1bGdmzZ8/ui0QRsAN+S0SIrLHFCEGbG9cDbeaE40sh+Lr7o9rRs6g==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.9",
-          "Microsoft.Extensions.Caching.Memory": "10.0.9",
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.9",
-          "Microsoft.Extensions.Logging": "10.0.9"
+          "Microsoft.EntityFrameworkCore": "10.0.10",
+          "Microsoft.Extensions.Caching.Memory": "10.0.10",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+          "Microsoft.Extensions.Logging": "10.0.10"
         }
       },
       "Microsoft.EntityFrameworkCore.Sqlite.Core": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "3bPEmACAaPJJSw+m5XwTSi3yZnVtaifa4d8gLsNMzW0Qu28jS5kADSfgJRBlq49RJ1K098VCzEDRJwM8gE6f2w==",
+        "resolved": "10.0.10",
+        "contentHash": "YbVWMIouzwTKBiLms8boa7xeRT88wI14R1msv3XExFk9n0/sa8nU7MwDa1CKtfLGMJs7O7QWuS9/xhcQ72AD2A==",
         "dependencies": {
-          "Microsoft.Data.Sqlite.Core": "10.0.9",
-          "Microsoft.EntityFrameworkCore.Relational": "10.0.9",
-          "Microsoft.Extensions.Caching.Memory": "10.0.9",
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.9",
-          "Microsoft.Extensions.DependencyModel": "10.0.9",
-          "Microsoft.Extensions.Logging": "10.0.9",
+          "Microsoft.Data.Sqlite.Core": "10.0.10",
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.10",
+          "Microsoft.Extensions.Caching.Memory": "10.0.10",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+          "Microsoft.Extensions.DependencyModel": "10.0.10",
+          "Microsoft.Extensions.Logging": "10.0.10",
           "SQLitePCLRaw.core": "2.1.11"
         }
       },
@@ -290,10 +290,10 @@
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "qGhRPd3VxfLV9UqatVOiD9mAeUbj2KiMwGFYC5uXlzExiZQoe4X/hdmzGIU7BQjNLTqCnnbTHVyBglG3668/HA==",
+        "resolved": "10.0.10",
+        "contentHash": "5Vnd2I75DmZCVEjSynIdJ/0EGafgnLQwgR3t2C2/fkjx/nRG+cLwxLLdInoHeCEpkD5K4Ov/g9ZCRYrl4TRsaA==",
         "dependencies": {
-          "Microsoft.Extensions.Primitives": "10.0.9"
+          "Microsoft.Extensions.Primitives": "10.0.10"
         }
       },
       "Microsoft.Extensions.DependencyInjection": {
@@ -311,8 +311,8 @@
       },
       "Microsoft.Extensions.DependencyModel": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "SCDTQ6HubnRvTUjR7dgMKHZvNoCb03t44ttHL8trlFTGgfDteWn/0nRdOxDhcI+lTWhKgd/flCVJEtAOPhSLNg=="
+        "resolved": "10.0.10",
+        "contentHash": "rfZA1RjR021RPqSmIPovfz2aOd79TGqJ9BengbjnzIISOVwjLmuSDnhCMmiY/1c6iYvGolQ1iNGzkav0u11XEA=="
       },
       "Microsoft.Extensions.Logging": {
         "type": "Transitive",
