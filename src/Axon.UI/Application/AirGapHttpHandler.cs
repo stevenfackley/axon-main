@@ -1,5 +1,3 @@
-using System.Net.Http;
-
 namespace Axon.UI.Application;
 
 /// <summary>

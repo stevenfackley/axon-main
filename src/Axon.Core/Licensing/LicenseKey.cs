@@ -65,7 +65,7 @@ public static class LicenseKey
             return false;
 
         var payloadSegment = key[..dotIndex];
-        var hmacSegment    = key[(dotIndex + 1)..];
+        var hmacSegment = key[(dotIndex + 1)..];
 
         // Decode HMAC first — avoids parsing untrusted payload before auth check.
         byte[] providedHmac;
@@ -99,7 +99,7 @@ public static class LicenseKey
         if (pipeIndex <= 0 || pipeIndex >= payload.Length - 1)
             return false;
 
-        var tierString   = payload[..pipeIndex];
+        var tierString = payload[..pipeIndex];
         var expiryString = payload[(pipeIndex + 1)..];
 
         if (!Enum.TryParse<LicenseTier>(tierString, ignoreCase: false, out var parsedTier))
@@ -131,9 +131,9 @@ public static class LicenseKey
     /// <returns>A signed license key string in <c>payload.hmac</c> format.</returns>
     public static string MintForTesting(LicenseTier tier, DateTimeOffset expiry)
     {
-        var payload      = $"{tier}|{expiry.ToUnixTimeSeconds()}";
+        var payload = $"{tier}|{expiry.ToUnixTimeSeconds()}";
         var payloadBytes = Encoding.UTF8.GetBytes(payload);
-        var hmac         = HMACSHA256.HashData(VerificationSecret, payloadBytes);
+        var hmac = HMACSHA256.HashData(VerificationSecret, payloadBytes);
 
         return $"{Base64UrlEncode(payloadBytes)}.{Base64UrlEncode(hmac)}";
     }
@@ -152,7 +152,7 @@ public static class LicenseKey
         switch (s.Length % 4)
         {
             case 2: s += "=="; break;
-            case 3: s += "=";  break;
+            case 3: s += "="; break;
         }
         return Convert.FromBase64String(s);
     }

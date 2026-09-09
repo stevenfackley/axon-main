@@ -1,4 +1,3 @@
-using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Axon.Core.Licensing;
@@ -141,6 +140,11 @@ public sealed class App : AvaloniaApp
             new DailyAnalysisBucketStrategy(TimeSpan.MaxValue, 60 * 60 * 24, "1-day buckets"));
 
         var importCoordinator = new DataImportCoordinator(biometricRepository);
+
+        // Seed deterministic test data if the database is empty.
+        // Skips if any biometric events already exist; safe to call every startup.
+        var seedService = new TelemetrySeedDataService(biometricRepository);
+        _ = seedService.SeedIfEmptyAsync().AsTask().ConfigureAwait(false);
 
         // License tier: from a validated AXON_LICENSE_KEY, else a dev default.
         // PRODUCTION must default to LicenseTier.Free once Store billing is wired.
