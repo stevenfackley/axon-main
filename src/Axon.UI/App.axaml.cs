@@ -1,4 +1,3 @@
-using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Axon.Core.Licensing;
