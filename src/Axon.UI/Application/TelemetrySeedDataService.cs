@@ -1,17 +1,27 @@
+using System.Buffers.Binary;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 
 namespace Axon.UI.Application;
 
 /// <summary>
-/// Generates deterministic seed data for local testing and development.
-/// Creates a realistic 30-day time series across all relevant biometric types.
-/// Safe to call on every app startup; skips if data already exists.
+/// Generates seed data for local testing and development: a realistic 30-day
+/// time series across the dashboard's biometric types.
+/// Opt-in only (see <see cref="IsEnabled"/>): seeding writes through the normal
+/// ingest path, so every seeded row also lands in the sync outbox. It must never
+/// run against a real user's database by default.
+/// Idempotent: skips when the repository already holds any biometric data.
 /// </summary>
 internal sealed class TelemetrySeedDataService
 {
-    private readonly IBiometricRepository _repository;
-    private static readonly TimeSpan SeedWindowStart = TimeSpan.FromDays(-30);
+    /// <summary>Environment variable that opts a run into demo-data seeding ("1" or "true").</summary>
+    internal const string EnableVariable = "AXON_SEED_DEMO_DATA";
+
+    internal const string SeedDeviceId = "local-dev-seed";
+    internal const string SeedVendor = "Axon Seed Data";
+
+    private const int SeedDays = 30;
+    private const int RandomSeed = 42;
 
     private static readonly Dictionary<BiometricType, string> BiometricUnits = new()
     {
@@ -25,35 +35,50 @@ internal sealed class TelemetrySeedDataService
         { BiometricType.SleepEfficiency, "%" }
     };
 
-    public TelemetrySeedDataService(IBiometricRepository repository)
+    private readonly IBiometricRepository _repository;
+    private readonly TimeProvider _timeProvider;
+
+    public TelemetrySeedDataService(IBiometricRepository repository, TimeProvider? timeProvider = null)
     {
         _repository = repository;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    /// <summary>True when <see cref="EnableVariable"/> is set to "1" or "true" (case-insensitive).</summary>
+    public static bool IsEnabled(string? value) =>
+        value is not null
+        && (value.Trim() == "1" || value.Trim().Equals("true", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Seeds the repository when it holds no biometric data of any type.
+    /// Returns true when seed data was written.
+    /// </summary>
     public async ValueTask<bool> SeedIfEmptyAsync(CancellationToken ct = default)
     {
-        var existing = await _repository.QueryRangeAsync(
-            BiometricType.HeartRate,
-            DateTimeOffset.UtcNow.AddDays(-365),
-            DateTimeOffset.UtcNow,
-            ct);
-
-        if (existing.Count > 0)
+        var latest = await _repository.GetLatestVitalsAsync(ct).ConfigureAwait(false);
+        if (latest.Count > 0)
             return false;
 
-        var events = GenerateSeedEvents();
-        await _repository.IngestBatchAsync(events, ct);
+        await _repository.IngestBatchAsync(GenerateSeedEvents(), ct).ConfigureAwait(false);
         return true;
     }
 
-    private List<BiometricEvent> GenerateSeedEvents()
+    internal List<BiometricEvent> GenerateSeedEvents()
     {
         var events = new List<BiometricEvent>();
-        var now = DateTimeOffset.UtcNow;
-        var startTime = now + SeedWindowStart;
-        var random = new Random(seed: 42);
+        var now = _timeProvider.GetUtcNow();
+        // Align to the top of the hour so the 15-minute grid is stable within a run.
+        var startTime = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, TimeSpan.Zero)
+            .AddDays(-SeedDays);
+        var random = new Random(RandomSeed);
+        var source = new SourceMetadata(
+            DeviceId: SeedDeviceId,
+            Vendor: SeedVendor,
+            FirmwareVersion: null,
+            ConfidenceScore: 1.0f,
+            IngestionTimestamp: now);
 
-        for (int dayOffset = 0; dayOffset < 30; dayOffset++)
+        for (int dayOffset = 0; dayOffset < SeedDays; dayOffset++)
         {
             var dayStart = startTime.AddDays(dayOffset);
             var dayOfWeek = dayStart.DayOfWeek;
@@ -73,7 +98,7 @@ internal sealed class TelemetrySeedDataService
                         BiometricType.HeartRate,
                         dayStart.AddHours(hour).AddMinutes(minute),
                         hr + (random.NextDouble() * 3 - 1.5),
-                        random));
+                        source));
                 }
             }
 
@@ -90,12 +115,12 @@ internal sealed class TelemetrySeedDataService
                         BiometricType.HeartRateVariability,
                         dayStart.AddHours(hour).AddMinutes(minute),
                         hrv + (random.NextDouble() * 20 - 10),
-                        random));
+                        source));
                 }
             }
 
             // SpO2
-            double baseSpO2 = 98.5;
+            const double baseSpO2 = 98.5;
             for (int hour = 0; hour < 24; hour++)
             {
                 bool isSleep = hour >= 22 || hour < 6;
@@ -108,7 +133,7 @@ internal sealed class TelemetrySeedDataService
                         BiometricType.SpO2,
                         dayStart.AddHours(hour).AddMinutes(minute),
                         spo2,
-                        random));
+                        source));
                 }
             }
 
@@ -121,58 +146,55 @@ internal sealed class TelemetrySeedDataService
                 _ => (dayOfWeek - DayOfWeek.Monday) % 4 * 2
             });
             double recovery = Math.Clamp(recoveryTrajectory + (random.NextDouble() * 15 - 7.5), 15, 95);
-            events.Add(CreateBiometricEvent(BiometricType.RecoveryScore, dayStart.AddHours(6), recovery, random));
+            events.Add(CreateBiometricEvent(BiometricType.RecoveryScore, dayStart.AddHours(6), recovery, source));
 
             // Readiness Score
             double readiness = Math.Clamp(
                 recovery * 0.6 + (isRestDay ? 15 : -10) + (random.NextDouble() * 20 - 10),
                 10, 98);
-            events.Add(CreateBiometricEvent(BiometricType.ReadinessScore, dayStart.AddHours(7), readiness, random));
+            events.Add(CreateBiometricEvent(BiometricType.ReadinessScore, dayStart.AddHours(7), readiness, source));
 
             // Strain Score
             double strain = isRestDay ? random.NextDouble() * 2 : 5 + random.NextDouble() * 12;
             strain = Math.Clamp(strain, 0, 21);
-            events.Add(CreateBiometricEvent(BiometricType.StrainScore, dayStart.AddHours(20), strain, random));
+            events.Add(CreateBiometricEvent(BiometricType.StrainScore, dayStart.AddHours(20), strain, source));
 
             // Sleep Efficiency
             double sleepEfficiency = 85 + (isRestDay ? 5 : -3) + (random.NextDouble() * 8 - 4);
             sleepEfficiency = Math.Clamp(sleepEfficiency, 65, 99);
-            events.Add(CreateBiometricEvent(BiometricType.SleepEfficiency, dayStart.AddHours(8), sleepEfficiency, random));
+            events.Add(CreateBiometricEvent(BiometricType.SleepEfficiency, dayStart.AddHours(8), sleepEfficiency, source));
 
             // Sleep Duration
             double sleepDuration = 7.5 + (isRestDay ? 0.5 : -0.3) + (random.NextDouble() * 1 - 0.5);
             sleepDuration = Math.Clamp(sleepDuration, 5, 10);
-            events.Add(CreateBiometricEvent(BiometricType.SleepDuration, dayStart.AddHours(8), sleepDuration, random));
+            events.Add(CreateBiometricEvent(BiometricType.SleepDuration, dayStart.AddHours(8), sleepDuration, source));
         }
 
         return events;
     }
 
+    /// <summary>
+    /// Builds an event whose Id is derived from (type, timestamp) with no hashing,
+    /// so two distinct seed points can never collide on the primary key.
+    /// </summary>
     private static BiometricEvent CreateBiometricEvent(
         BiometricType type,
         DateTimeOffset timestamp,
         double value,
-        Random random)
+        SourceMetadata source)
     {
-        var idBytes = new byte[16];
-        var typeHash = type.GetHashCode();
-        var tsHash = timestamp.UtcTicks.GetHashCode();
-        var combined = (typeHash ^ tsHash).GetHashCode();
-
-        var guidRandom = new Random(combined);
-        guidRandom.NextBytes(idBytes);
-        var id = new Guid(idBytes);
+        Span<byte> idBytes = stackalloc byte[16];
+        idBytes[0] = 0xA5; // seed-data marker
+        idBytes[1] = (byte)type;
+        BinaryPrimitives.WriteInt64LittleEndian(idBytes[8..], timestamp.UtcTicks);
 
         return new BiometricEvent(
-            Id: id,
+            Id: new Guid(idBytes),
             Timestamp: timestamp,
             Type: type,
             Value: value,
             Unit: BiometricUnits.TryGetValue(type, out var unit) ? unit : "unknown",
-            Source: new SourceMetadata(
-                SourceType: "seed-data",
-                DeviceId: "local-dev-seed",
-                DeviceName: "Development Seed Data"),
+            Source: source,
             CorrelationId: null);
     }
 }

@@ -141,10 +141,16 @@ public sealed class App : AvaloniaApp
 
         var importCoordinator = new DataImportCoordinator(biometricRepository);
 
-        // Seed deterministic test data if the database is empty.
-        // Skips if any biometric events already exist; safe to call every startup.
-        var seedService = new TelemetrySeedDataService(biometricRepository);
-        _ = seedService.SeedIfEmptyAsync().AsTask().ConfigureAwait(false);
+        // Dev-only demo data: opt in with AXON_SEED_DEMO_DATA=1. Never on by default,
+        // since seeded rows go through the real ingest path (and the sync outbox).
+        // Runs to completion before any view model touches the shared DbContext;
+        // a fire-and-forget seed would race the dashboard's first queries.
+        if (TelemetrySeedDataService.IsEnabled(
+                Environment.GetEnvironmentVariable(TelemetrySeedDataService.EnableVariable)))
+        {
+            var seedService = new TelemetrySeedDataService(biometricRepository);
+            Task.Run(() => seedService.SeedIfEmptyAsync().AsTask()).GetAwaiter().GetResult();
+        }
 
         // License tier: from a validated AXON_LICENSE_KEY, else a dev default.
         // PRODUCTION must default to LicenseTier.Free once Store billing is wired.
