@@ -25,18 +25,18 @@ public static class FeatureGate
         feature switch
         {
             // Free features are available to everyone.
-            Feature.ManualImport        => true,
-            Feature.BasicVisualization  => true,
-            Feature.TwelveMonthHistory  => true,
+            Feature.ManualImport => true,
+            Feature.BasicVisualization => true,
+            Feature.TwelveMonthHistory => true,
 
             // Pro / Lifetime exclusive features.
-            Feature.ApiSync             => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.UnlimitedHistory    => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.MlInsightEngine     => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.CorrelationLab      => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.ShareableExports    => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.MultiSource         => tier is LicenseTier.Pro or LicenseTier.Lifetime,
-            Feature.SovereignSync       => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.ApiSync => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.UnlimitedHistory => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.MlInsightEngine => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.CorrelationLab => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.ShareableExports => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.MultiSource => tier is LicenseTier.Pro or LicenseTier.Lifetime,
+            Feature.SovereignSync => tier is LicenseTier.Pro or LicenseTier.Lifetime,
 
             // Unknown future features: deny by default (fail-closed).
             _ => false,
