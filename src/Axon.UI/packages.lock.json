@@ -147,12 +147,12 @@
       },
       "SkiaSharp": {
         "type": "Direct",
-        "requested": "[4.151.2, )",
-        "resolved": "4.151.2",
-        "contentHash": "zqcEy5E17Tqoh2tEvb4uC2G3ulli5YdsljzZuf93pCc/9gQDMx9VrUInxiqkLMGt+MjQi8hNrf1Uxmq25yyU3A==",
+        "requested": "[4.153.1, )",
+        "resolved": "4.153.1",
+        "contentHash": "TghYLOUaP3q6rTjQw7U9uQaaXh8lEs9rfA1U7/VtmyAptVDtj/SmjtcWzFWmcC/VMWxe3QgbV9uyvqDL7ySFtQ==",
         "dependencies": {
-          "SkiaSharp.NativeAssets.Win32": "4.151.2",
-          "SkiaSharp.NativeAssets.macOS": "4.151.2"
+          "SkiaSharp.NativeAssets.Win32": "4.153.1",
+          "SkiaSharp.NativeAssets.macOS": "4.153.1"
         }
       },
       "Tmds.DBus.Protocol": {
@@ -555,8 +555,8 @@
       },
       "SkiaSharp.NativeAssets.macOS": {
         "type": "Transitive",
-        "resolved": "4.151.2",
-        "contentHash": "hDGy20k1DJZuKcdbHjwaOfsPeQYY9ty8wJeG1qzJWidPUzrwwvVtTLpDdTiP1M89UWbEYyWAhZo9qOaoYae6iQ=="
+        "resolved": "4.153.1",
+        "contentHash": "YTojWeWIhnpF7uC8vpMxB5wRONKkDB2t3r/nNPA3DL2pgj9fqMXRevA/rIanYazWnco4jo1ufgp3HkXuh1Tz8A=="
       },
       "SkiaSharp.NativeAssets.WebAssembly": {
         "type": "Transitive",
@@ -565,8 +565,8 @@
       },
       "SkiaSharp.NativeAssets.Win32": {
         "type": "Transitive",
-        "resolved": "4.151.2",
-        "contentHash": "sTUHSfWXVYThf/lTG81n8y1gMnr0TiN/2zrApwd0jbGfbsEt9g4+GPsj6UVjjgNLXCI9l5CyzxQ6Zh4fP9ZoVQ=="
+        "resolved": "4.153.1",
+        "contentHash": "Yqg6rChTVh0BUE8QQxtOA3uUBnihfgID4yex/AvDa0+os2bVcBjmI3Qj9tnOB+R1hd/Jry1Gwl8qw5JI9HZG8Q=="
       },
       "SQLitePCLRaw.bundle_e_sqlcipher": {
         "type": "Transitive",
