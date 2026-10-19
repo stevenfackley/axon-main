@@ -46,8 +46,8 @@
     <!-- ML.NET: core + time-series catalog for IID Spike + SSA Forecasting -->
     <!-- Note: ML.NET uses dynamic code generation internally; PublishAot is set to
          false for inference-heavy builds. For strict AOT targets use ONNX export. -->
-    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
-    <PackageReference Include="Microsoft.ML.TimeSeries" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML" Version="5.0.1" />
+    <PackageReference Include="Microsoft.ML.TimeSeries" Version="5.0.1" />
   </ItemGroup>
 
   <!--
