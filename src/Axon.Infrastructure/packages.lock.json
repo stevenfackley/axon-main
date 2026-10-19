@@ -60,13 +60,13 @@
       },
       "Microsoft.ML": {
         "type": "Direct",
-        "requested": "[5.0.0, )",
-        "resolved": "5.0.0",
-        "contentHash": "clHLX6bjcRpuHDRkXwkm/gSILifT0DOXXzgor4kBhjTkz5G419BCXhZ1xVk/GsMH6koqWwMONjQKzSSCSVZrIQ==",
+        "requested": "[5.0.1, )",
+        "resolved": "5.0.1",
+        "contentHash": "H+MSEsYVrNyV/AcA2UtgYkHsuXEKNVOoKUtUCv+nFzD5+1NWeRMRM87A1wL6jm1CCMTLlPQDR4tkurpEtO+dQg==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "9.0.4",
-          "Microsoft.ML.CpuMath": "5.0.0",
-          "Microsoft.ML.DataView": "5.0.0",
+          "Microsoft.ML.CpuMath": "5.0.1",
+          "Microsoft.ML.DataView": "5.0.1",
           "Newtonsoft.Json": "13.0.3",
           "System.CodeDom": "9.0.4",
           "System.Numerics.Tensors": "9.0.4"
@@ -74,13 +74,13 @@
       },
       "Microsoft.ML.TimeSeries": {
         "type": "Direct",
-        "requested": "[5.0.0, )",
-        "resolved": "5.0.0",
-        "contentHash": "tDk3a+Ju1GZrV/1Z6/3smAqeP+eISKie18PxVFZk3/KypQOoCGLjb71RoceN5MAM2NKGnzi2u3yCMWjDQmM3jw==",
+        "requested": "[5.0.1, )",
+        "resolved": "5.0.1",
+        "contentHash": "hH6QqjxY1MZlVo9NQdoyB2BJ6hMHPFBD0eAqMj8v2pDo9CctGzXAJ9h6MOWHAHcDuCjK9b94iEBb5eSufcC58A==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "9.0.4",
-          "Microsoft.ML": "5.0.0",
-          "Microsoft.ML.Mkl.Redist": "5.0.0",
+          "Microsoft.ML": "5.0.1",
+          "Microsoft.ML.Mkl.Redist": "5.0.1",
           "Newtonsoft.Json": "13.0.3",
           "System.CodeDom": "9.0.4",
           "System.Numerics.Tensors": "9.0.4"
@@ -326,21 +326,21 @@
       },
       "Microsoft.ML.CpuMath": {
         "type": "Transitive",
-        "resolved": "5.0.0",
-        "contentHash": "Qv0OeYmFkzDC9AjfJfUUTiIYcnb49K5oGtUUOIkr0BrApqWm6niHZqCrD3iJJi2BORbto/eEfP7/+uNqHxGvYg==",
+        "resolved": "5.0.1",
+        "contentHash": "8qG872NrrcBItqNVRomcR8I9qfsidbonMtyuEihn1VTmDiDl0/B2g2OvLNfhl5ZrsDaff7s9XpUKKFCo+85fLQ==",
         "dependencies": {
           "System.Numerics.Tensors": "9.0.4"
         }
       },
       "Microsoft.ML.DataView": {
         "type": "Transitive",
-        "resolved": "5.0.0",
-        "contentHash": "G8onJ9msBpLYea29WyG+NRV010rg75hJDUIEK3+sSDFAR0OV5p74QjZWnpNbyhT8OkAJdSNkif4l9/iCWZ2LOQ=="
+        "resolved": "5.0.1",
+        "contentHash": "k7V0P33vXBD8S53OjIoJGKEGFLNf0LMDUUBnmZRtSwlgruhBGGdrxjhDn5GwPK2t0hP3/SPM8Qdly14CIftIBw=="
       },
       "Microsoft.ML.Mkl.Redist": {
         "type": "Transitive",
-        "resolved": "5.0.0",
-        "contentHash": "2ml+nLekvALAkyxeJMx2VEme5KZqfwBAQ5YnjXhTPv+LbKsbpJLYbzlIT5HGIDaBkV6H2OOek9f3gWpfgZPaMg=="
+        "resolved": "5.0.1",
+        "contentHash": "L0iVtIJsGgIt0xZxgR1VoyuYIx5tkboQ0/a0bxCnu+/c6XB+00EsPjQk2mvCSVMJt9LyK2pDJT2SEJvA8aBndg=="
       },
       "Microsoft.VisualStudio.SolutionPersistence": {
         "type": "Transitive",
