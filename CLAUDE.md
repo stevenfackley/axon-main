@@ -23,10 +23,10 @@ Biometric ingestion + analysis platform. Local-first; no cloud.
 - **Types:** `record` for immutable DTOs and for `BiometricEvent`
 
 ## Layout
-- `src/` — application + library projects (`Axon.UI`, `Axon.Domain`, `Axon.Infrastructure`, etc.)
-- `tests/` — unit + integration tests
+- `src/` — application + library projects (`Axon.Core`, `Axon.Infrastructure`, `Axon.UI`)
+- `tests/` — single test project `tests/Axon.Tests` (unit + integration)
 - `Axon.sln` — solution file (CI consumes this)
-- `Directory.Build.props` — shared MSBuild props (treats warnings as errors, etc.)
+- `Directory.Build.props` — shared MSBuild props (enables NuGet lock files via `RestorePackagesWithLockFile`)
 - `NuGet.Config` — feed configuration consumed by CI
 
 ## CI/CD

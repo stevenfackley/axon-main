@@ -33,7 +33,7 @@ so biometric data cannot leak into logs.
 
 ## Tables
 
-The local SQLite database contains three tables:
+The local SQLite database contains five tables:
 
 ### `BiometricEvents`
 The normalized ACS events above (stored flat for AOT-friendly EF mapping). The `DeviceId`
@@ -49,6 +49,16 @@ network I/O happens inside the transaction.
 An append-only, immutable record of every read and write against biometric data (HIPAA-style
 audit trail). Caller identity is stored only as a SHA-256 hash — never a raw username —
 satisfying data-minimization. You can inspect this table to see exactly what touched your data.
+
+### `Tags`
+User-defined lifestyle/context tags (e.g. "caffeine", "alcohol", "travel") that the correlation
+lab can test against biometrics. Columns: `Id`, `Name` (max 64 chars, indexed), `Category`
+(max 32 chars). Added by migration `AddTagging`.
+
+### `TagAnnotations`
+Dated occurrences of a tag: `Id`, `TagId`, `TimestampMs` (Unix milliseconds, indexed),
+an optional `Value` (dose/amount) and an optional `Note` (max 512 chars). Indexed by time for
+range queries and by `TagId` for per-tag lookups. Added by migration `AddTagging`.
 
 ---
 

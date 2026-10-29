@@ -55,7 +55,7 @@ Dependency flow is **always inward**: `UI → Core ← Infrastructure`. The `Cor
 ### Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) (see `global.json` for pinned version)
-- Visual Studio 2022 17.12+ **or** JetBrains Rider 2024.3+
+- Visual Studio 2026 **or** JetBrains Rider 2025.3+ (both needed for .NET 10)
 - Windows 11 for full TPM/hardware vault testing
 - (Optional) Android SDK for mobile `Satellite` contributions
 
@@ -94,13 +94,12 @@ Always run this before submitting a PR that touches `Axon.Core` or `Axon.Infrast
 
 | Branch | Purpose |
 |---|---|
-| `main` | Stable, releasable code |
-| `dev` | Integration branch for completed features |
-| `feature/<name>` | New features (branch from `dev`) |
-| `fix/<name>` | Bug fixes (branch from `dev` or `main` for hotfixes) |
+| `main` | Trunk: stable, releasable code |
+| `feature/<name>` | New features (branch from `main`) |
+| `fix/<name>` | Bug fixes (branch from `main`) |
 | `chore/<name>` | Non-functional changes (docs, CI, refactors) |
 
-**Never commit directly to `main`.** All changes go through a PR targeting `dev`.
+**Never commit directly to `main`.** All changes go through a PR targeting `main`, merged by squash.
 
 ---
 
@@ -108,13 +107,13 @@ Always run this before submitting a PR that touches `Axon.Core` or `Axon.Infrast
 
 1. **Check existing issues** — look for an open issue or discussion before starting new work.
 2. **Open an issue first** for significant changes (new drivers, architectural shifts). This prevents duplicate effort.
-3. **Fork the repo** and create your branch from `dev`:
+3. **Fork the repo** and create your branch from `main`:
    ```bash
-   git checkout -b feature/garmin-driver dev
+   git checkout -b feature/garmin-driver main
    ```
 4. **Write your code** following the standards below.
 5. **Run the full test suite** and ensure it passes.
-6. **Open a Pull Request** against `dev` using the PR template.
+6. **Open a Pull Request** against `main` using the PR template.
 
 ---
 
@@ -255,7 +254,7 @@ public static class FitbitNormalizationMapper
 
 ### 4. Write Tests
 
-Create `tests/Axon.Infrastructure.Tests/Drivers/<VendorName>/` with 100% coverage of the mapper:
+Create `tests/Axon.Tests/Drivers/<VendorName>DriverTests.cs` with 100% coverage of the mapper:
 
 ```bash
 dotnet test --collect:"XPlat Code Coverage"

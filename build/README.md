@@ -172,11 +172,20 @@ Or use **Transporter.app** (free from the Mac App Store).
 
 ## CI Pipeline
 
-The GitHub Actions workflow at `.github/workflows/ci.yml` runs automatically on every push and pull request to `main` and `dev`:
+Two GitHub Actions workflows run on every pull request and on every push to `main`.
+
+`.github/workflows/ci.yml` is a thin wrapper around the reusable `stevenfackley/gh-actions/.github/workflows/ci-dotnet.yml@v1` (runs on `windows-latest`, AOT RID `win-x64`, Android workload installed):
 
 | Job | What It Does |
 |---|---|
-| `build-and-test` | `dotnet build` + `dotnet test` on Windows |
-| `aot-publish` | Native AOT publish for `win-x64` (validates AOT compatibility) |
-| `dependency-audit` | Scans for known CVEs and banned telemetry packages |
-| `architecture-check` | Verifies `Axon.Core` has no forbidden references to Infrastructure or UI |
+| `resolve-solution` | Resolves `Axon.sln` for the downstream jobs |
+| Build & Test | `dotnet build` + `dotnet test` on Windows |
+| Native AOT Publish (win-x64) | Native AOT publish for `win-x64` (validates AOT compatibility) |
+| Dependency & Telemetry Audit | Scans for known CVEs and banned telemetry packages |
+
+`.github/workflows/architecture.yml` is separate (job `boundary-check`, shown as "Axon.Core boundary", on `ubuntu-latest`):
+
+| Step | What It Does |
+|---|---|
+| Verify Axon.Core has no Infrastructure/UI references | Verifies `Axon.Core` has no forbidden references to Infrastructure or UI |
+| Verify no hardcoded keys or connection strings in Core | Greps `Axon.Core` for hardcoded secrets |
