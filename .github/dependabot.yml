@@ -2,14 +2,21 @@ version: 2
 updates:
   - package-ecosystem: nuget
     directory: /
-    schedule: { interval: weekly, day: monday }
-    open-pull-requests-limit: 10
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 3
     groups:
       dotnet-runtime:
         patterns: ["Microsoft.Extensions.*", "Microsoft.AspNetCore.*"]
+        update-types: ["minor", "patch"]
       testing:
         patterns: ["xunit*", "coverlet.*", "Microsoft.NET.Test.*", "NetArchTest.*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly, day: monday }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
