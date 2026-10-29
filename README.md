@@ -181,7 +181,7 @@ dotnet publish src/Axon.UI -r win-x64 -c Release /p:PublishAot=true
 ### Publish (Android)
 
 ```bash
-builduild-android.cmd
+build\build-android.cmd
 ```
 
 See [build/README.md](build/README.md) for the Android build scripts (`build/build-android.cmd`, `build/build-android.sh`).
