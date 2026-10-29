@@ -31,11 +31,12 @@ Axon utilizes a **Hexagonal (Ports and Adapters) Architecture**. This ensures th
 To solve the "Data Babel" problem of different wearable vendors, all data is normalized into a single `BiometricEvent` record. This ensures that a "Heart Rate" event from Garmin is identical in structure to one from Whoop.
 
 ```csharp
-public record BiometricEvent(
+public sealed record BiometricEvent(
     Guid Id,
     DateTimeOffset Timestamp,
     BiometricType Type, // Enum: HeartRate, HRV, SpO2, Sleep, etc.
     double Value,
+    string Unit, // SI unit string, e.g. "bpm", "ms", "%"
     SourceMetadata Source, // Device ID, Vendor, Confidence Score
     string? CorrelationId = null // Used for the Outbox Pattern
 );

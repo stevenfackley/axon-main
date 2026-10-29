@@ -11,7 +11,6 @@
 | Version | Supported |
 |---|---|
 | `main` (latest) | ✅ Active security support |
-| `dev` (pre-release) | ⚠️ Best-effort |
 | All tagged releases | See release notes |
 
 ---

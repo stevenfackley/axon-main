@@ -148,7 +148,7 @@ axon-main/
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - Windows 11 (Power Station), or iOS/Android for Satellite builds
-- Visual Studio 2022 17.12+ **or** JetBrains Rider 2024.3+
+- Visual Studio 2026 **or** JetBrains Rider 2025.3+ (both needed for .NET 10)
 - (Optional) Android SDK for mobile development
 
 ### Clone & Build
@@ -181,8 +181,10 @@ dotnet publish src/Axon.UI -r win-x64 -c Release /p:PublishAot=true
 ### Publish (Android)
 
 ```bash
-build-android.cmd
+builduild-android.cmd
 ```
+
+See [build/README.md](build/README.md) for the Android build scripts (`build/build-android.cmd`, `build/build-android.sh`).
 
 ---
 
@@ -201,12 +203,13 @@ build-android.cmd
 
 | Source | Status | Method |
 |---|---|---|
-| Whoop | 🚧 In Progress | REST API (OAuth 2.0) |
-| Garmin Connect | 🚧 In Progress | REST API |
-| Oura Cloud | 🚧 In Progress | REST API |
-| Apple HealthKit | 🗓 Planned | Native bridge (iOS) |
+| Whoop | ✅ Implemented | REST API (OAuth 2.0) |
+| Garmin Connect | ✅ Implemented | REST API |
+| Oura Cloud | ✅ Implemented | REST API |
+| Apple HealthKit | ✅ Implemented (iOS only) | Native bridge (iOS) |
 | Android Health Connect | 🗓 Planned | Native bridge (Android) |
-| CSV / JSON Import | 🗓 Planned | Manual legacy import |
+| CSV Import | ✅ Implemented | Manual legacy import (`CsvBiometricImporter`) |
+| JSON Import | 🗓 Planned | Manual legacy import |
 
 ---
 
@@ -215,11 +218,12 @@ build-android.cmd
 All vendor data is normalized into a single `BiometricEvent` record on ingestion. This is the cornerstone of Axon's "Data Babel" solution:
 
 ```csharp
-public record BiometricEvent(
+public sealed record BiometricEvent(
     Guid Id,
     DateTimeOffset Timestamp,
     BiometricType Type,       // HeartRate, HRV, SpO2, Sleep, Steps, etc.
     double Value,
+    string Unit,              // SI unit string: "bpm", "ms", "%", "W"
     SourceMetadata Source,    // Vendor, DeviceId, ConfidenceScore
     string? CorrelationId = null  // Transactional Outbox correlation
 );
@@ -267,10 +271,10 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure policy.
 - [ ] Correlation drag-and-drop Lab UI
 
 ### v1.3 — Wearable Drivers *(Month 3-4)*
-- [ ] Whoop REST driver
-- [ ] Garmin Connect driver
-- [ ] Oura Cloud driver
-- [ ] Apple HealthKit bridge (iOS)
+- [x] Whoop REST driver
+- [x] Garmin Connect driver
+- [x] Oura Cloud driver
+- [x] Apple HealthKit bridge (iOS)
 - [ ] Android Health Connect bridge
 
 ### v2.0 — Sovereign Sync + Store Launch *(Month 4)*
@@ -278,7 +282,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure policy.
 - [ ] Android Satellite app
 - [ ] iOS Satellite app
 - [ ] Windows Store MSIX packaging
-- [ ] Freemium / Axon Pro licensing gate ($4.99/mo · $39.99/yr · $79.99 launch lifetime)
+- [x] Freemium / Axon Pro licensing gate ($4.99/mo · $39.99/yr · $79.99 launch lifetime)
 
 ---
 
