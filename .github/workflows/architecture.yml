@@ -3,7 +3,7 @@ name: architecture
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [main]
 
 concurrency:
   group: architecture-${{ github.ref }}
