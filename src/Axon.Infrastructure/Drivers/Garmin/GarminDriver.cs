@@ -320,15 +320,14 @@ public sealed class GarminDriverOptions
     /// <summary>
     /// Garmin Health API consumer key (OAuth1) or client ID (OAuth2).
     /// Obtain from https://developer.garmin.com/gc-developer-program/
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Empty until configured — <see cref="GarminDriver.IsAvailableAsync"/> reports unavailable.
     /// </summary>
-    public string ConsumerKey { get; set; } = "GARMIN_CONSUMER_KEY_PLACEHOLDER";
+    public string ConsumerKey { get; set; } = "";
 
     /// <summary>
-    /// Garmin Health API consumer secret.
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Garmin Health API consumer secret. Empty until configured. Never log this value.
     /// </summary>
-    public string ConsumerSecret { get; set; } = "GARMIN_CONSUMER_SECRET_PLACEHOLDER";
+    public string ConsumerSecret { get; set; } = "";
 
     /// <summary>
     /// Garmin OAuth2 authorization endpoint (for Health API partner accounts).
