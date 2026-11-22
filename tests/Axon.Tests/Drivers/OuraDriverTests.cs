@@ -155,6 +155,15 @@ public sealed class OuraDriverTests : IDisposable
     }
 
     [Fact]
+    public async Task IsAvailable_FalseWithDefaultOptions()
+    {
+        var driver = BuildDriver(new InMemoryOAuthTokenStore(),
+            new HttpClient(StubHttpMessageHandler.ThrowingOnUse()),
+            new OuraDriverOptions());
+        Assert.False(await driver.IsAvailableAsync());
+    }
+
+    [Fact]
     public async Task IsAvailable_TrueWhenPatConfigured()
     {
         var driver = BuildDriver(new InMemoryOAuthTokenStore(),

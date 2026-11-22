@@ -56,10 +56,30 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
         });
 
         // Producer: drain the driver's lazy async enumerable into the channel.
-        var producerTask = ProduceAsync(driver, since, channel.Writer, ct);
+        using var producerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var producerTask = ProduceAsync(driver, since, channel.Writer, producerCts.Token);
 
         // Consumer: read from channel in batches and persist atomically.
-        int totalIngested = await ConsumeAsync(channel.Reader, ct).ConfigureAwait(false);
+        int totalIngested;
+        try
+        {
+            totalIngested = await ConsumeAsync(channel.Reader, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Nothing reads the channel any more, so a producer waiting on a full channel
+            // would block until ct fires. Cancel it and let the driver dispose first.
+            await producerCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await producerTask.ConfigureAwait(false);
+            }
+            catch
+            {
+                // The consumer's exception is the one the caller needs.
+            }
+            throw;
+        }
 
         await producerTask.ConfigureAwait(false);
 

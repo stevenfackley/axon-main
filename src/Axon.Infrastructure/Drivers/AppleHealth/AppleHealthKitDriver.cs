@@ -135,7 +135,7 @@ public sealed class AppleHealthKitDriver : IBiometricDriver
 
             if (hkType is null) continue;
 
-            var (unit, hkUnit) = GetUnitForTypeId(typeId);
+            var (hkUnit, unit) = GetUnitForTypeId(typeId);
             if (unit is null || hkUnit is null) continue;
 
             await foreach (var evt in QueryQuantitySamplesAsync(

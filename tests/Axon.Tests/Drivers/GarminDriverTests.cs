@@ -146,6 +146,15 @@ public sealed class GarminDriverTests : IDisposable
     }
 
     [Fact]
+    public async Task IsAvailable_FalseWithDefaultOptions()
+    {
+        var driver = BuildDriver(new InMemoryOAuthTokenStore(),
+            new HttpClient(StubHttpMessageHandler.ThrowingOnUse()),
+            new GarminDriverOptions());
+        Assert.False(await driver.IsAvailableAsync());
+    }
+
+    [Fact]
     public async Task IsAvailable_TrueWhenConsumerKeyConfigured()
     {
         var driver = BuildDriver(new InMemoryOAuthTokenStore(),

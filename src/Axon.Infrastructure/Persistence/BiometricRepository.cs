@@ -6,6 +6,7 @@ using Axon.Core.Serialization;
 using Axon.Infrastructure.Persistence.Entities;
 using Axon.Infrastructure.Persistence.Mappers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Axon.Infrastructure.Persistence;
 
@@ -185,6 +186,7 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     /// THE canonical write path. Atomically persists biometric events and their
     /// SyncOutbox entries in one EF Core transaction. Never call AddAsync/AddRangeAsync
     /// for inbound data — use this method exclusively.
+    /// Events whose id is already stored are skipped, so re-ingesting is idempotent.
     /// </summary>
     public async ValueTask IngestBatchAsync(
         IReadOnlyList<BiometricEvent> events,
@@ -193,16 +195,33 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
         var now = DateTimeOffset.UtcNow;
         var correlationId = Guid.NewGuid().ToString("N");
 
+        // Event ids are deterministic, so a re-import or a re-sync over an overlapping
+        // window sends ids that are already stored (or repeated within the batch).
+        // Insert only the new ones; one known id would otherwise fail the whole batch.
+        var known = new HashSet<Guid>();
+        foreach (var chunk in events.Select(e => e.Id).Chunk(500))
+        {
+            known.UnionWith(await db.BiometricEvents
+                .Where(e => chunk.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToListAsync(ct)
+                .ConfigureAwait(false));
+        }
+
+        var added = new List<EntityEntry>(events.Count * 2);
         foreach (var evt in events)
         {
+            if (!known.Add(evt.Id))
+                continue;
+
             // Persist the event entity
-            db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt));
+            added.Add(db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt)));
 
             // Serialize payload for the outbox (AOT-safe via AxonJsonContext)
             var payload = JsonSerializer.Serialize(evt, AxonJsonContext.Default.BiometricEvent);
 
             // Write corresponding outbox entry in the SAME unit-of-work
-            db.SyncOutbox.Add(new SyncOutboxEntity
+            added.Add(db.SyncOutbox.Add(new SyncOutboxEntity
             {
                 Id = Guid.NewGuid(),
                 BiometricEventId = evt.Id,
@@ -210,10 +229,24 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
                 SerializedPayload = payload,   // EncryptionDecorator encrypts this in its layer
                 CreatedAtUnixMs = now.ToUnixTimeMilliseconds(),
                 RetryCount = 0,
-            });
+            }));
         }
 
+        if (added.Count == 0)
+            return;
+
         // Single SaveChangesAsync = single SQLite transaction covering both tables
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The context outlives this call. Left tracked, the failed inserts would be
+            // retried (and fail again) by every later SaveChanges, audit writes included.
+            foreach (var entry in added)
+                entry.State = EntityState.Detached;
+            throw;
+        }
     }
 }

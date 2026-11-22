@@ -52,7 +52,24 @@ public sealed class WhoopSyncCoordinator
     public async Task SyncNowAsync(CancellationToken ct = default)
     {
         var since = _lastSync ?? DateTimeOffset.UtcNow - InitialLookback;
-        await _orchestrator.IngestAsync(_driver, since, ct).ConfigureAwait(false);
+        var incomplete = false;
+        void OnFetchIncomplete(object? sender, EventArgs e) => incomplete = true;
+
+        _driver.FetchIncomplete += OnFetchIncomplete;
+        try
+        {
+            await _orchestrator.IngestAsync(_driver, since, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _driver.FetchIncomplete -= OnFetchIncomplete;
+        }
+
+        // Keep the watermark so the next sync fetches the skipped window again.
+        if (incomplete)
+            throw new InvalidOperationException(
+                "Whoop data could not be fetched (not connected, offline, or the Whoop API failed).");
+
         _lastSync = DateTimeOffset.UtcNow;
     }
 }

@@ -409,15 +409,15 @@ public sealed class OuraDriverOptions
     /// <summary>
     /// Oura OAuth2 client ID (for multi-user / app use).
     /// Register at: https://cloud.ouraring.com/oauth/applications
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Empty until configured — <see cref="OuraDriver.IsAvailableAsync"/> reports unavailable
+    /// unless this or <see cref="PersonalAccessToken"/> is set.
     /// </summary>
-    public string ClientId { get; set; } = "OURA_CLIENT_ID_PLACEHOLDER";
+    public string ClientId { get; set; } = "";
 
     /// <summary>
-    /// Oura OAuth2 client secret.
-    /// DUMMY VALUE — replace with real credentials before use.
+    /// Oura OAuth2 client secret. Empty until configured. Never log this value.
     /// </summary>
-    public string ClientSecret { get; set; } = "OURA_CLIENT_SECRET_PLACEHOLDER";
+    public string ClientSecret { get; set; } = "";
 
     /// <summary>
     /// OAuth2 authorization URL for the Oura Ring app.
