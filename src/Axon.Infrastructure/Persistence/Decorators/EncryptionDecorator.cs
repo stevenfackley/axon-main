@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Security;
 
 namespace Axon.Infrastructure.Persistence.Decorators;
 
@@ -69,46 +70,18 @@ public sealed class EncryptionDecorator(
     // ── Encryption helpers ────────────────────────────────────────────────────
 
     /// <summary>
-    /// AES-256-GCM encrypt. Returns Base64(nonce || tag || ciphertext).
-    /// Allocates only for the output byte array — no intermediate strings.
+    /// AES-256-GCM encrypt. Returns Base64(nonce || tag || ciphertext) — see <see cref="AesGcmEnvelope"/>.
     /// </summary>
     private static string Encrypt(ReadOnlySpan<byte> key, string plaintext)
-    {
-        var plaintextBytes = System.Text.Encoding.UTF8.GetBytes(plaintext);
-        var nonce = new byte[AesGcm.NonceByteSizes.MaxSize];   // 12 bytes
-        var tag = new byte[AesGcm.TagByteSizes.MaxSize];      // 16 bytes
-        var ciphertext = new byte[plaintextBytes.Length];
-
-        RandomNumberGenerator.Fill(nonce);
-
-        using var aes = new AesGcm(key, AesGcm.TagByteSizes.MaxSize);
-        aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
-
-        // Pack: nonce[12] || tag[16] || ciphertext[n] → single Base64 string
-        var blob = new byte[28 + ciphertext.Length];
-        nonce.CopyTo(blob, 0);
-        tag.CopyTo(blob, 12);
-        ciphertext.CopyTo(blob, 28);
-        return Convert.ToBase64String(blob);
-    }
+        => Convert.ToBase64String(
+            AesGcmEnvelope.Seal(key, System.Text.Encoding.UTF8.GetBytes(plaintext)));
 
     /// <summary>
-    /// AES-256-GCM decrypt. Accepts Base64(nonce || tag || ciphertext).
+    /// AES-256-GCM decrypt. Accepts Base64(nonce || tag || ciphertext) — see <see cref="AesGcmEnvelope"/>.
     /// </summary>
     private static string Decrypt(ReadOnlySpan<byte> key, string blob)
-    {
-        var data = Convert.FromBase64String(blob);
-        var nonce = data.AsSpan(0, 12);
-        var tag = data.AsSpan(12, 16);
-        var ciphertext = data.AsSpan(28);
-
-        Span<byte> plaintext = stackalloc byte[ciphertext.Length];
-
-        using var aes = new AesGcm(key, AesGcm.TagByteSizes.MaxSize);
-        aes.Decrypt(nonce, ciphertext, tag, plaintext);
-
-        return System.Text.Encoding.UTF8.GetString(plaintext);
-    }
+        => System.Text.Encoding.UTF8.GetString(
+            AesGcmEnvelope.Open(key, Convert.FromBase64String(blob)));
 
     // ── Event transformation ──────────────────────────────────────────────────
 

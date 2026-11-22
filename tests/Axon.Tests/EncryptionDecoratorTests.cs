@@ -232,6 +232,86 @@ public class EncryptionDecoratorTests
         Assert.Equal(0, inner.DecryptCallCount);   // No decrypt calls for aggregates
     }
 
+    // ── Persisted format: Base64(nonce[12] || tag[16] || ciphertext) ─────────
+
+    private const string FieldKeyLabel = "axon.field.pii";
+
+    [Fact]
+    public async Task AddAsync_WritesNonceTagCiphertextThatOpensByHand()
+    {
+        var vault = new MockHardwareVault();
+        var inner = new CapturingRepository();
+        await using var decorator = new EncryptionDecorator(inner, vault);
+
+        await decorator.AddAsync(MakeEvent("fixture-device"));
+
+        var blob = Convert.FromBase64String(inner.LastAddedEvent!.Source.DeviceId);
+        var plaintext = System.Text.Encoding.UTF8.GetBytes("fixture-device");
+        Assert.Equal(12 + 16 + plaintext.Length, blob.Length);
+        Assert.Equal(plaintext, OpenByHand(await KeyAsync(vault), blob));
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReadsABlobSealedByHand()
+    {
+        var vault = new MockHardwareVault();
+        var sealedId = Convert.ToBase64String(
+            SealByHand(await KeyAsync(vault), System.Text.Encoding.UTF8.GetBytes("fixture-device")));
+        var inner = new CapturingRepository { GetByIdResult = MakeEvent(sealedId) };
+        await using var decorator = new EncryptionDecorator(inner, vault);
+
+        var result = await decorator.GetByIdAsync(Guid.NewGuid());
+
+        Assert.Equal("fixture-device", result!.Source.DeviceId);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_TamperedBlob_ReturnsStoredValueUnchanged()
+    {
+        var vault = new MockHardwareVault();
+        var blob = SealByHand(await KeyAsync(vault), System.Text.Encoding.UTF8.GetBytes("fixture-device"));
+        blob[^1] ^= 0xFF;
+        var stored = Convert.ToBase64String(blob);
+        var inner = new CapturingRepository { GetByIdResult = MakeEvent(stored) };
+        await using var decorator = new EncryptionDecorator(inner, vault);
+
+        var result = await decorator.GetByIdAsync(Guid.NewGuid());
+
+        // Authentication failure is treated as a pre-encryption (plaintext) row.
+        Assert.Equal(stored, result!.Source.DeviceId);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_BlobShorterThanNonceAndTag_Throws()
+    {
+        var vault = new MockHardwareVault();
+        var inner = new CapturingRepository { GetByIdResult = MakeEvent(Convert.ToBase64String(new byte[20])) };
+        await using var decorator = new EncryptionDecorator(inner, vault);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => decorator.GetByIdAsync(Guid.NewGuid()).AsTask());
+    }
+
+    private static async Task<byte[]> KeyAsync(MockHardwareVault vault)
+        => (await vault.DeriveKeyAsync(FieldKeyLabel)).ToArray();
+
+    private static byte[] SealByHand(byte[] key, byte[] plaintext)
+    {
+        byte[] nonce = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        var tag = new byte[16];
+        var ciphertext = new byte[plaintext.Length];
+        using var aes = new AesGcm(key, 16);
+        aes.Encrypt(nonce, plaintext, ciphertext, tag);
+        return [.. nonce, .. tag, .. ciphertext];
+    }
+
+    private static byte[] OpenByHand(byte[] key, byte[] blob)
+    {
+        var plaintext = new byte[blob.Length - 28];
+        using var aes = new AesGcm(key, 16);
+        aes.Decrypt(blob.AsSpan(0, 12), blob.AsSpan(28), blob.AsSpan(12, 16), plaintext);
+        return plaintext;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static bool IsBase64(string s)
