@@ -51,7 +51,7 @@ public static class WhoopNormalizationMapper
         if (score is null) yield break;
 
         // Timestamps for recovery records use the created_at field.
-        var ts = ParseTimestamp(recovery.CreatedAt);
+        var ts = DriverUtilities.ParseTimestamp(recovery.CreatedAt);
 
         yield return Make(deviceId, ts, BiometricType.RecoveryScore,
             score.RecoveryScore, "%", correlationId);
@@ -87,7 +87,7 @@ public static class WhoopNormalizationMapper
         var score = sleep.Score;
         if (score is null) yield break;
 
-        var ts = ParseTimestamp(sleep.Start);
+        var ts = DriverUtilities.ParseTimestamp(sleep.Start);
 
         // Sleep stage durations — Whoop reports in milliseconds; ACS wants seconds.
         var stages = score.StageSummary;
@@ -132,7 +132,7 @@ public static class WhoopNormalizationMapper
         var score = cycle.Score;
         if (score is null) yield break;
 
-        var ts = ParseTimestamp(cycle.Start);
+        var ts = DriverUtilities.ParseTimestamp(cycle.Start);
 
         yield return Make(deviceId, ts, BiometricType.StrainScore,
             score.Strain, "strain", correlationId);
@@ -162,7 +162,7 @@ public static class WhoopNormalizationMapper
         var score = workout.Score;
         if (score is null) yield break;
 
-        var ts = ParseTimestamp(workout.Start);
+        var ts = DriverUtilities.ParseTimestamp(workout.Start);
 
         yield return Make(deviceId, ts, BiometricType.TrainingLoad,
             score.Strain, "strain", correlationId);
@@ -203,19 +203,7 @@ public static class WhoopNormalizationMapper
         double value,
         string unit,
         string? correlationId) =>
-        new(
-            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp: timestamp,
-            Type: type,
-            Value: value,
-            Unit: unit,
-            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
-            CorrelationId: correlationId);
-
-    private static DateTimeOffset ParseTimestamp(string iso8601)
-        => DateTimeOffset.Parse(iso8601,
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.RoundtripKind);
+        DriverUtilities.MakeEvent(Vendor, Confidence, deviceId, timestamp, type, value, unit, correlationId);
 
     private static double MillisToSeconds(long millis) => millis / 1000.0;
 }

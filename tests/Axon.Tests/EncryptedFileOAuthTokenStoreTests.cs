@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Security;
@@ -108,6 +109,58 @@ public sealed class EncryptedFileOAuthTokenStoreTests : IDisposable
 
         Assert.Equal("whoop-tok", (await store.GetTokenAsync("whoop"))!.AccessToken);
         Assert.Equal("oura-tok", (await store.GetTokenAsync("oura"))!.AccessToken);
+    }
+
+    // ── Persisted format: nonce[12] || tag[16] || ciphertext ──────────────────
+
+    private const string TokenKeyLabel = "axon.oauth.tokens";
+
+    [Fact]
+    public async Task SavedFile_IsNonceTagCiphertext_AndReadsBackWhenResealedByHand()
+    {
+        var vault = new MockHardwareVault();
+        var store = new EncryptedFileOAuthTokenStore(vault, _dir);
+        await store.SaveTokenAsync("whoop", SampleToken());
+        var path = Path.Combine(_dir, "whoop.token");
+        var key = (await vault.DeriveKeyAsync(TokenKeyLabel)).ToArray();
+
+        var blob = await File.ReadAllBytesAsync(path);
+        var plaintext = new byte[blob.Length - 28];
+        using (var aes = new AesGcm(key, 16))
+            aes.Decrypt(blob.AsSpan(0, 12), blob.AsSpan(28), blob.AsSpan(12, 16), plaintext);
+
+        // Re-seal the same plaintext with a fixed nonce: the store must read any blob in this layout.
+        byte[] nonce = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        var tag = new byte[16];
+        var ciphertext = new byte[plaintext.Length];
+        using (var aes = new AesGcm(key, 16))
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+        await File.WriteAllBytesAsync(path, [.. nonce, .. tag, .. ciphertext]);
+
+        var retrieved = await store.GetTokenAsync("whoop");
+        Assert.Equal(SampleToken(), retrieved);
+    }
+
+    [Fact]
+    public async Task TamperedFile_ThrowsAuthenticationFailure()
+    {
+        var store = NewStore();
+        await store.SaveTokenAsync("whoop", SampleToken());
+        var path = Path.Combine(_dir, "whoop.token");
+        var blob = await File.ReadAllBytesAsync(path);
+        blob[^1] ^= 0xFF;
+        await File.WriteAllBytesAsync(path, blob);
+
+        await Assert.ThrowsAnyAsync<CryptographicException>(() => store.GetTokenAsync("whoop").AsTask());
+    }
+
+    [Fact]
+    public async Task FileShorterThanNonceAndTag_Throws()
+    {
+        var store = NewStore();
+        await File.WriteAllBytesAsync(Path.Combine(_dir, "whoop.token"), new byte[20]);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => store.GetTokenAsync("whoop").AsTask());
     }
 
     [Fact]

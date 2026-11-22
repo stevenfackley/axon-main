@@ -31,7 +31,7 @@ internal sealed class TelemetrySeedDataService
         { BiometricType.RecoveryScore, "score" },
         { BiometricType.ReadinessScore, "score" },
         { BiometricType.StrainScore, "score" },
-        { BiometricType.SleepDuration, "hours" },
+        { BiometricType.SleepDuration, "s" },
         { BiometricType.SleepEfficiency, "%" }
     };
 
@@ -164,10 +164,10 @@ internal sealed class TelemetrySeedDataService
             sleepEfficiency = Math.Clamp(sleepEfficiency, 65, 99);
             events.Add(CreateBiometricEvent(BiometricType.SleepEfficiency, dayStart.AddHours(8), sleepEfficiency, source));
 
-            // Sleep Duration
-            double sleepDuration = 7.5 + (isRestDay ? 0.5 : -0.3) + (random.NextDouble() * 1 - 0.5);
-            sleepDuration = Math.Clamp(sleepDuration, 5, 10);
-            events.Add(CreateBiometricEvent(BiometricType.SleepDuration, dayStart.AddHours(8), sleepDuration, source));
+            // Sleep Duration — generated in hours, stored in seconds like every vendor driver.
+            double sleepHours = 7.5 + (isRestDay ? 0.5 : -0.3) + (random.NextDouble() * 1 - 0.5);
+            sleepHours = Math.Clamp(sleepHours, 5, 10);
+            events.Add(CreateBiometricEvent(BiometricType.SleepDuration, dayStart.AddHours(8), sleepHours * 3600, source));
         }
 
         return events;

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using Axon.Core.Ports;
 
@@ -12,7 +11,7 @@ namespace Axon.Infrastructure.Security;
 /// Storage layout:
 ///   • One file per driver: <c>{tokenDirectory}/{driverId}.token</c>
 ///   • File contents: raw bytes of <c>nonce[12] || tag[16] || ciphertext</c>
-///     (same authenticated scheme as <c>EncryptionDecorator</c>, sans Base64 —
+///     (the shared <see cref="AesGcmEnvelope"/>, as <c>EncryptionDecorator</c> uses, sans Base64 —
 ///     these are opaque binary files, never logged or displayed).
 ///
 /// Serialization (pre-encryption) uses a length-prefixed binary layout via
@@ -24,8 +23,6 @@ namespace Axon.Infrastructure.Security;
 public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
 {
     private const string TokenKeyLabel = "axon.oauth.tokens";
-    private const int NonceSize = 12;   // AesGcm.NonceByteSizes.MaxSize
-    private const int TagSize = 16;     // AesGcm.TagByteSizes.MaxSize
 
     private readonly IHardwareVault _vault;
     private readonly string _tokenDirectory;
@@ -115,19 +112,7 @@ public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
         var keyMem = await _vault.DeriveKeyAsync(TokenKeyLabel, ct).ConfigureAwait(false);
         try
         {
-            var nonce = new byte[NonceSize];
-            var tag = new byte[TagSize];
-            var ciphertext = new byte[plaintext.Length];
-            RandomNumberGenerator.Fill(nonce);
-
-            using var aes = new AesGcm(keyMem.Span, TagSize);
-            aes.Encrypt(nonce, plaintext, ciphertext, tag);
-
-            var blob = new byte[NonceSize + TagSize + ciphertext.Length];
-            nonce.CopyTo(blob, 0);
-            tag.CopyTo(blob, NonceSize);
-            ciphertext.CopyTo(blob, NonceSize + TagSize);
-            return blob;
+            return AesGcmEnvelope.Seal(keyMem.Span, plaintext);
         }
         finally
         {
@@ -140,14 +125,7 @@ public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
         var keyMem = await _vault.DeriveKeyAsync(TokenKeyLabel, ct).ConfigureAwait(false);
         try
         {
-            var nonce = blob.AsSpan(0, NonceSize);
-            var tag = blob.AsSpan(NonceSize, TagSize);
-            var ciphertext = blob.AsSpan(NonceSize + TagSize);
-            var plaintext = new byte[ciphertext.Length];
-
-            using var aes = new AesGcm(keyMem.Span, TagSize);
-            aes.Decrypt(nonce, ciphertext, tag, plaintext);
-            return plaintext;
+            return AesGcmEnvelope.Open(keyMem.Span, blob);
         }
         finally
         {

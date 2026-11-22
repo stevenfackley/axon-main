@@ -42,7 +42,7 @@ public static class OuraNormalizationMapper
         OuraDailyReadiness readiness,
         string? correlationId = null)
     {
-        var ts = ParseTimestamp(readiness.Timestamp);
+        var ts = DriverUtilities.ParseTimestamp(readiness.Timestamp);
         // Use the record ID as device identifier (Oura Ring ID is embedded in each record)
         var deviceId = readiness.Id;
 
@@ -66,7 +66,7 @@ public static class OuraNormalizationMapper
         OuraSleepSession session,
         string? correlationId = null)
     {
-        var ts = ParseTimestamp(session.BedtimeStart);
+        var ts = DriverUtilities.ParseTimestamp(session.BedtimeStart);
         var deviceId = session.Id;
 
         if (session.TotalSleepDuration.HasValue)
@@ -136,7 +136,7 @@ public static class OuraNormalizationMapper
         OuraDailyActivity activity,
         string? correlationId = null)
     {
-        var ts = ParseTimestamp(activity.Timestamp);
+        var ts = DriverUtilities.ParseTimestamp(activity.Timestamp);
         var deviceId = activity.Id;
 
         if (activity.Steps.HasValue)
@@ -164,7 +164,7 @@ public static class OuraNormalizationMapper
         string ringId,
         string? correlationId = null)
     {
-        var ts = ParseTimestamp(sample.Timestamp);
+        var ts = DriverUtilities.ParseTimestamp(sample.Timestamp);
         var deviceId = $"{ringId}:{sample.Source}";
 
         return Make(deviceId, ts, BiometricType.HeartRate,
@@ -207,7 +207,7 @@ public static class OuraNormalizationMapper
         string unit,
         string? correlationId)
     {
-        var startTs = ParseTimestamp(series.Timestamp);
+        var startTs = DriverUtilities.ParseTimestamp(series.Timestamp);
         var intervalMs = (long)(series.Interval * 1000.0);
 
         for (int i = 0; i < series.Items.Count; i++)
@@ -227,17 +227,5 @@ public static class OuraNormalizationMapper
         double value,
         string unit,
         string? correlationId) =>
-        new(
-            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp: timestamp,
-            Type: type,
-            Value: value,
-            Unit: unit,
-            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
-            CorrelationId: correlationId);
-
-    private static DateTimeOffset ParseTimestamp(string iso8601)
-        => DateTimeOffset.Parse(iso8601,
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.RoundtripKind);
+        DriverUtilities.MakeEvent(Vendor, Confidence, deviceId, timestamp, type, value, unit, correlationId);
 }

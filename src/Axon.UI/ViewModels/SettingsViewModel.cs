@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Axon.UI.Application;
 using Axon.UI.Commands;
 
 namespace Axon.UI.ViewModels;
@@ -22,7 +23,6 @@ namespace Axon.UI.ViewModels;
 public sealed class SettingsViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
-    public event EventHandler<bool>? AirGapChanged;
     public event EventHandler<bool>? TelemetryEnabledChanged;
 
     /// <summary>Raised when the user initiates the GDPR key-destruction flow.</summary>
@@ -62,9 +62,13 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     private readonly DelegateCommand _connectWhoopCommand;
     private readonly DelegateCommand _syncWhoopCommand;
+    private readonly AirGapState _airGapState;
 
-    public SettingsViewModel()
+    public SettingsViewModel(AirGapState airGapState)
     {
+        _airGapState = airGapState;
+        _airGapState.Changed += (_, _) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AirGapEnabled)));
         _connectWhoopCommand = new DelegateCommand(
             () => WhoopConnectRequested?.Invoke(this, EventArgs.Empty),
             () => IsWhoopConfigured && !IsWhoopBusy);
@@ -188,15 +192,11 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     // ── Air-gap ───────────────────────────────────────────────────────────────
 
-    private bool _airGapEnabled;
+    /// <summary>Air-Gap Mode toggle, backed by the shared <see cref="AirGapState"/>.</summary>
     public bool AirGapEnabled
     {
-        get => _airGapEnabled;
-        set
-        {
-            if (!SetField(ref _airGapEnabled, value)) return;
-            AirGapChanged?.Invoke(this, value);
-        }
+        get => _airGapState.Enabled;
+        set => _airGapState.Enabled = value;
     }
 
     private bool _telemetryEnabled;

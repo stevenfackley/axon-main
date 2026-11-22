@@ -63,6 +63,24 @@ public class TelemetrySeedDataServiceTests
         Assert.All(first, e => Assert.True(e.Timestamp <= clock.GetUtcNow()));
     }
 
+    [Fact]
+    public void GenerateSeedEvents_SleepDuration_IsInSecondsLikeEveryDriver()
+    {
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 9, 22, 13, 37, 0, TimeSpan.Zero));
+
+        var sleep = new TelemetrySeedDataService(new RecordingRepository(), clock)
+            .GenerateSeedEvents()
+            .Where(e => e.Type == BiometricType.SleepDuration)
+            .ToList();
+
+        Assert.NotEmpty(sleep);
+        Assert.All(sleep, e =>
+        {
+            Assert.Equal("s", e.Unit);
+            Assert.InRange(e.Value, 5 * 3600d, 10 * 3600d);
+        });
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

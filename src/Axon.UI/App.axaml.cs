@@ -101,7 +101,10 @@ public sealed class App : AvaloniaApp
         var syncOutboxRepository = new SyncOutboxRepository(db);
         var inferenceService = new LocalInferenceService(loggerFactory.CreateLogger<LocalInferenceService>());
         var syncTransport = new LoopbackSyncTransport();
-        var relayService = new OutboxRelayService(syncOutboxRepository, syncTransport, healthReportWriter);
+        // Air-gap enforcement: one shared flag. The relay stops draining and outbound HTTP
+        // is physically blocked while the toggle is on.
+        var airGapState = new AirGapState();
+        var relayService = new OutboxRelayService(syncOutboxRepository, syncTransport, healthReportWriter, airGapState);
 
         // ── Whoop integration ─────────────────────────────────────────────────
         // Credentials come from the WHOOP_API_CLIENT_ID / WHOOP_API_SECRET env vars,
@@ -110,8 +113,6 @@ public sealed class App : AvaloniaApp
         var whoopClientId = Environment.GetEnvironmentVariable("WHOOP_API_CLIENT_ID") ?? "";
         var whoopSecret = Environment.GetEnvironmentVariable("WHOOP_API_SECRET") ?? "";
 
-        // Air-gap enforcement: outbound HTTP is physically blocked when the toggle is on.
-        var airGapState = new AirGapState();
         var whoopHttp = new HttpClient(
             new AirGapHttpHandler(airGapState) { InnerHandler = new HttpClientHandler() });
         var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, "tokens"));

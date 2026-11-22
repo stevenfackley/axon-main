@@ -8,7 +8,5 @@ internal interface IOutboxRelayService : IAsyncDisposable
 
     Task StartAsync(CancellationToken ct = default);
 
-    void SetAirGapEnabled(bool enabled);
-
     Task RefreshAsync(CancellationToken ct = default);
 }

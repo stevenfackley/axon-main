@@ -194,14 +194,7 @@ public static class GarminNormalizationMapper
         double value,
         string unit,
         string? correlationId) =>
-        new(
-            Id: DriverUtilities.DeterministicId(Vendor, deviceId, timestamp, type),
-            Timestamp: timestamp,
-            Type: type,
-            Value: value,
-            Unit: unit,
-            Source: DriverUtilities.BuildSource(Vendor, deviceId, Confidence),
-            CorrelationId: correlationId);
+        DriverUtilities.MakeEvent(Vendor, Confidence, deviceId, timestamp, type, value, unit, correlationId);
 
     /// <summary>
     /// Converts a Unix epoch (seconds) + UTC offset (seconds) to a
