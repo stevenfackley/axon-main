@@ -5,9 +5,12 @@ using SQLitePCL;
 namespace Axon.Infrastructure.Persistence;
 
 /// <summary>
-/// Constructs a fully-configured, SQLCipher-encrypted <see cref="AxonDbContext"/>.
+/// Opens Axon's SQLCipher-encrypted vault once, then hands out a short-lived
+/// <see cref="AxonDbContext"/> per operation.
 ///
-/// Usage: resolve via DI; do not construct <see cref="AxonDbContext"/> directly.
+/// Usage: call <see cref="InitialiseAsync"/> once at start-up, then pass the factory to the
+/// repositories. Each repository method creates, uses and disposes its own context, so no
+/// change tracker or connection is shared between callers or threads.
 ///
 /// Encryption flow:
 ///   1. <see cref="IHardwareVault.DeriveKeyAsync"/> returns a 32-byte AES key
@@ -15,14 +18,22 @@ namespace Axon.Infrastructure.Persistence;
 ///   2. The raw bytes are hex-encoded and injected into the SQLite connection
 ///      string as <c>Password=hex:&lt;64-char-hex&gt;</c>.
 ///   3. The key buffer is zeroed immediately after the connection string is built.
-///   4. WAL journal mode is set via pragma to enable concurrent read/write access.
+///   4. WAL journal mode is set via pragma to enable concurrent read/write access;
+///      the per-connection pragmas are applied to every connection by
+///      <see cref="ConnectionPragmaInterceptor"/>.
 /// </summary>
-public sealed class AxonDbContextFactory(IHardwareVault vault)
+public sealed class AxonDbContextFactory(IHardwareVault vault) : IDbContextFactory<AxonDbContext>
 {
     private const string KeyLabel = "axon.db.master";
     private const string DbFileName = "axon.vault.db";
 
-    public async ValueTask<AxonDbContext> CreateAsync(
+    private DbContextOptions<AxonDbContext>? _options;
+
+    /// <summary>
+    /// Derives the vault key, applies the database-level pragmas and runs the migrations.
+    /// Call once before <see cref="CreateDbContext"/>.
+    /// </summary>
+    public async ValueTask InitialiseAsync(
         string dataDirectory,
         CancellationToken ct = default)
     {
@@ -40,13 +51,26 @@ public sealed class AxonDbContextFactory(IHardwareVault vault)
             vault.ZeroKey(keyMaterial);
         }
 
-        var ctx = new AxonDbContext(CreateOptions(connStr));
+        var options = new DbContextOptionsBuilder<AxonDbContext>(CreateOptions(connStr))
+            .AddInterceptors(ConnectionPragmaInterceptor.Instance)
+            .Options;
 
-        await ConfigureDatabaseAsync(ctx, ct).ConfigureAwait(false);
-        await ctx.Database.MigrateAsync(ct).ConfigureAwait(false);
+        var ctx = new AxonDbContext(options);
+        await using (ctx.ConfigureAwait(false))
+        {
+            await ConfigureDatabaseAsync(ctx, ct).ConfigureAwait(false);
+            await ctx.Database.MigrateAsync(ct).ConfigureAwait(false);
+        }
 
-        return ctx;
+        _options = options;
     }
+
+    /// <summary>
+    /// A new context on the vault opened by <see cref="InitialiseAsync"/>. The caller disposes it.
+    /// </summary>
+    public AxonDbContext CreateDbContext() =>
+        new(_options ?? throw new InvalidOperationException(
+            "The vault is not open. Call InitialiseAsync before creating a context."));
 
     internal static DbContextOptions<AxonDbContext> CreateOptions(string connectionString) =>
         new DbContextOptionsBuilder<AxonDbContext>()
@@ -76,12 +100,11 @@ public sealed class AxonDbContextFactory(IHardwareVault vault)
 
     private static async Task ConfigureDatabaseAsync(AxonDbContext context, CancellationToken ct)
     {
-        // Enable WAL mode and set page size for high-throughput time-series writes.
+        // Database-level settings, kept in the file: enable WAL mode and set the page size
+        // for high-throughput time-series writes. The per-connection settings (cache size,
+        // synchronous, foreign keys) come from ConnectionPragmaInterceptor on every open.
         await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await context.Database.ExecuteSqlRawAsync("PRAGMA page_size=4096;", ct).ConfigureAwait(false);
-        await context.Database.ExecuteSqlRawAsync("PRAGMA cache_size=-32000;", ct).ConfigureAwait(false);
-        await context.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
-        await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;", ct).ConfigureAwait(false);
     }
 
     private static char ToHexChar(int nibble) =>

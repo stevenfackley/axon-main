@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text.Json;
 using Axon.Core.Domain;
+using Axon.Core.Ports;
 using Axon.Infrastructure.Drivers.Garmin;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Axon.Tests.Drivers;
@@ -234,5 +236,153 @@ public sealed class GarminDriverTests : IDisposable
             driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
 
         Assert.Empty(events);
+    }
+
+    // ── Request shape, error paths ──────────────────────────────────────────────
+
+    private static bool IsDailies(HttpRequestMessage req) =>
+        req.RequestUri!.AbsolutePath.EndsWith("dailies", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Fetch_MakesOneRequestPerEndpointWithTheUploadWindowAndBearerToken()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var queries = new List<string>();
+        var auth = new List<string?>();
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            queries.Add(req.RequestUri!.Query);
+            auth.Add(req.Headers.Authorization?.ToString());
+            return GarminHappyResponder(req);
+        });
+        var since = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+
+        await DriverTestHelpers.CollectAsync(
+            BuildDriver(store, new HttpClient(handler)).FetchSinceAsync(since));
+
+        Assert.Equal(["/dailies", "/sleeps", "/hrv", "/bodyComps"],
+            handler.RequestPaths.Select(p => p[p.LastIndexOf('/')..]));
+        Assert.All(queries, q => Assert.StartsWith(
+            "?uploadStartTimeInSeconds=1768003200&uploadEndTimeInSeconds=", q, StringComparison.Ordinal));
+        Assert.All(auth, a => Assert.Equal("Bearer access-token", a));
+    }
+
+    [Fact]
+    public async Task Fetch_ExpiredStoredToken_IsStillSent()
+    {
+        var expired = new OAuthTokenSet("old-token", "refresh-token", DateTimeOffset.UtcNow.AddHours(-1));
+        var store = new InMemoryOAuthTokenStore(DriverId, expired);
+        var auth = new List<string?>();
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            auth.Add(req.Headers.Authorization?.ToString());
+            return GarminHappyResponder(req);
+        });
+
+        await DriverTestHelpers.CollectAsync(
+            BuildDriver(store, new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Equal(4, auth.Count);
+        Assert.All(auth, a => Assert.Equal("Bearer old-token", a));
+    }
+
+    [Fact]
+    public async Task Fetch_WhenOneEndpointFails_LogsTheUrlAndFetchesTheRest()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(req => IsDailies(req)
+            ? StubHttpMessageHandler.Status(HttpStatusCode.BadGateway)
+            : GarminHappyResponder(req));
+        var logger = new CapturingLogger<GarminDriver>();
+        var driver = new GarminDriver(store, new HttpClient(handler), new GarminDriverOptions(), logger);
+
+        var events = await DriverTestHelpers.CollectAsync(
+            driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Empty(events);
+        Assert.Equal(4, handler.RequestPaths.Count);
+        var error = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
+        Assert.Equal("Garmin: API call failed for {Url}", error.Template);
+        Assert.Contains("/dailies?uploadStartTimeInSeconds=", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fetch_MalformedResponse_Throws()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("not json"));
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(
+                BuildDriver(store, new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1))));
+    }
+
+    [Fact]
+    public async Task ImportFile_NameMatchingTwoRoutes_UsesTheFirst()
+    {
+        var json = JsonSerializer.Serialize(new GarminDailySummaryList([SampleDaily()]));
+        var path = _temp.WriteFile("sleep_daily.json", json);
+
+        var events = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+
+        Assert.Contains(events, e => e.Type == BiometricType.Steps);
+    }
+
+    [Fact]
+    public async Task FetchAndImport_MatchPropertyNamesIgnoringCase()
+    {
+        var json = DriverTestHelpers.UpperCaseKeys(
+            JsonSerializer.Serialize(new GarminDailySummaryList([SampleDaily()])));
+        var path = _temp.WriteFile("daily.json", json);
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(req => IsDailies(req)
+            ? StubHttpMessageHandler.Json(json)
+            : GarminHappyResponder(req));
+
+        var imported = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+        var fetched = await DriverTestHelpers.CollectAsync(
+            BuildDriver(store, new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Contains(imported, e => e.Type == BiometricType.Steps);
+        Assert.Contains(fetched, e => e.Type == BiometricType.Steps);
+    }
+
+    [Fact]
+    public async Task ImportFile_WeightName_RoutesToBodyComposition()
+    {
+        var json = JsonSerializer.Serialize(new GarminBodyCompositionList([SampleBody()]));
+        var path = _temp.WriteFile("weight.json", json);
+
+        var events = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+
+        Assert.Contains(events, e => e.Type == BiometricType.BodyWeight);
+    }
+
+    [Fact]
+    public async Task ImportFile_UnrecognisedName_LogsAWarning()
+    {
+        var path = _temp.WriteFile("Mystery.json", "{}");
+        var logger = new CapturingLogger<GarminDriver>();
+        var driver = new GarminDriver(new InMemoryOAuthTokenStore(),
+            new HttpClient(StubHttpMessageHandler.ThrowingOnUse()), new GarminDriverOptions(), logger);
+
+        await DriverTestHelpers.CollectAsync(driver.ImportFileAsync(path));
+
+        Assert.Equal(
+            [
+                (LogLevel.Information, "Garmin: Importing file {File}", "Garmin: Importing file Mystery.json"),
+                (LogLevel.Warning, "Garmin: Unrecognised export file name '{File}' — skipping.",
+                    "Garmin: Unrecognised export file name 'mystery' — skipping."),
+            ],
+            logger.Entries);
+    }
+
+    [Fact]
+    public async Task ImportFile_MalformedFile_Throws()
+    {
+        var path = _temp.WriteFile("hrv.json", "not json");
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path)));
     }
 }

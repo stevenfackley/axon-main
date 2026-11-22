@@ -90,8 +90,10 @@ public sealed class App : AvaloniaApp
             ? new WindowsDataProtectionVault(keysDir)
             : new MockHardwareVault();
 
-        var dbFactory = new AxonDbContextFactory(vault);
-        var db = dbFactory.CreateAsync(dataDirectory).AsTask().GetAwaiter().GetResult();
+        // Opens and migrates the vault once; every repository call then gets its own
+        // short-lived DbContext from the factory.
+        var db = new AxonDbContextFactory(vault);
+        db.InitialiseAsync(dataDirectory).AsTask().GetAwaiter().GetResult();
 
         // Mandatory decorator chain (outer → inner): Audit → Encryption → concrete repo.
         // Every biometric write is AES-256-GCM field-encrypted and audit-logged — no bypass.
@@ -144,7 +146,7 @@ public sealed class App : AvaloniaApp
 
         // Dev-only demo data: opt in with AXON_SEED_DEMO_DATA=1. Never on by default,
         // since seeded rows go through the real ingest path (and the sync outbox).
-        // Runs to completion before any view model touches the shared DbContext;
+        // Runs to completion before any view model reads the vault;
         // a fire-and-forget seed would race the dashboard's first queries.
         if (TelemetrySeedDataService.IsEnabled(
                 Environment.GetEnvironmentVariable(TelemetrySeedDataService.EnableVariable)))
@@ -179,7 +181,7 @@ public sealed class App : AvaloniaApp
         mainWindow.Settings.LicenseTierText = licenseTier.ToString();
 
         return new AppRuntime(
-            mainWindow, inferenceService, db, relayService, loggerFactory, observabilityRuntime,
+            mainWindow, inferenceService, relayService, loggerFactory, observabilityRuntime,
             whoopHttp, encryptedRepository);
     }
 
@@ -225,7 +227,6 @@ public sealed class App : AvaloniaApp
 internal sealed class AppRuntime(
     MainWindowViewModel mainWindowViewModel,
     IDisposable inferenceService,
-    IDisposable dbContext,
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
     IDisposable observabilityRuntime,
@@ -240,7 +241,6 @@ internal sealed class AppRuntime(
         // Zero the cached field-encryption key held by the EncryptionDecorator.
         repository.DisposeAsync().AsTask().GetAwaiter().GetResult();
         inferenceService.Dispose();
-        dbContext.Dispose();
         whoopHttp.Dispose();
         // Flush and close Serilog sinks (writes any buffered log entries).
         loggerFactory.Dispose();

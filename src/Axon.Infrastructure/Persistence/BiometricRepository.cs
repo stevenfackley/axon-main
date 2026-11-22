@@ -6,12 +6,15 @@ using Axon.Core.Serialization;
 using Axon.Infrastructure.Persistence.Entities;
 using Axon.Infrastructure.Persistence.Mappers;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Axon.Infrastructure.Persistence;
 
 /// <summary>
 /// Concrete EF Core adapter for <see cref="IBiometricRepository"/>.
+///
+/// Every method works on its own short-lived <see cref="AxonDbContext"/> from
+/// <paramref name="contexts"/>, so nothing stays tracked between calls and calls from
+/// different threads never share a context.
 ///
 /// Performance notes:
 ///   • All query projections use <c>AsNoTracking()</c> — these are immutable
@@ -21,13 +24,16 @@ namespace Axon.Infrastructure.Persistence;
 ///   • <see cref="StreamRangeAsync"/> uses EF Core's <c>AsAsyncEnumerable</c>
 ///     to avoid materialising large result sets on the managed heap.
 /// </summary>
-public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
+public sealed class BiometricRepository(IDbContextFactory<AxonDbContext> contexts) : IBiometricRepository
 {
     // ── IRepository<BiometricEvent, Guid> ─────────────────────────────────────
 
     public async ValueTask<BiometricEvent?> GetByIdAsync(
         Guid id, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         var entity = await db.BiometricEvents
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.Id == id, ct)
@@ -38,6 +44,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
 
     public async ValueTask AddAsync(BiometricEvent evt, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
@@ -45,6 +54,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     public async ValueTask AddRangeAsync(
         IReadOnlyList<BiometricEvent> events, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         foreach (var evt in events)
             db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -52,12 +64,18 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
 
     public async ValueTask UpdateAsync(BiometricEvent evt, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         db.BiometricEvents.Update(BiometricEventMapper.ToEntity(evt));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     public async ValueTask DeleteAsync(Guid id, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         await db.BiometricEvents
             .Where(e => e.Id == id)
             .ExecuteDeleteAsync(ct)
@@ -75,6 +93,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
         long fromMs = from.ToUnixTimeMilliseconds();
         long toMs = to.ToUnixTimeMilliseconds();
         byte typeB = (byte)type;
+
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
 
         var entities = await db.BiometricEvents
             .AsNoTracking()
@@ -103,6 +124,10 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
         long toMs = to.ToUnixTimeMilliseconds();
         byte typeB = (byte)type;
 
+        // The context lives until the caller finishes (or abandons) the enumeration.
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         await foreach (var entity in db.BiometricEvents
             .AsNoTracking()
             .Where(e => e.BiometricType == typeB
@@ -128,6 +153,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
         long toMs = to.ToUnixTimeMilliseconds();
         long bucketMs = (long)bucketSizeSeconds * 1000L;
         byte typeB = (byte)type;
+
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
 
         // SQLite integer arithmetic groups rows into fixed-width time buckets.
         // EF Core translates this to a raw SQL GROUP BY without LINQ overhead.
@@ -166,6 +194,9 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
     public async ValueTask<IReadOnlyDictionary<BiometricType, BiometricEvent>> GetLatestVitalsAsync(
         CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         // Fetch the most-recent event per BiometricType using a subquery.
         // Performed in a single DB round-trip.
         var latest = await db.BiometricEvents
@@ -195,6 +226,10 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
         var now = DateTimeOffset.UtcNow;
         var correlationId = Guid.NewGuid().ToString("N");
 
+        // A failed save leaves its inserts tracked only in this context, which is discarded.
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         // Event ids are deterministic, so a re-import or a re-sync over an overlapping
         // window sends ids that are already stored (or repeated within the batch).
         // Insert only the new ones; one known id would otherwise fail the whole batch.
@@ -208,20 +243,20 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
                 .ConfigureAwait(false));
         }
 
-        var added = new List<EntityEntry>(events.Count * 2);
+        int added = 0;
         foreach (var evt in events)
         {
             if (!known.Add(evt.Id))
                 continue;
 
             // Persist the event entity
-            added.Add(db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt)));
+            db.BiometricEvents.Add(BiometricEventMapper.ToEntity(evt));
 
             // Serialize payload for the outbox (AOT-safe via AxonJsonContext)
             var payload = JsonSerializer.Serialize(evt, AxonJsonContext.Default.BiometricEvent);
 
             // Write corresponding outbox entry in the SAME unit-of-work
-            added.Add(db.SyncOutbox.Add(new SyncOutboxEntity
+            db.SyncOutbox.Add(new SyncOutboxEntity
             {
                 Id = Guid.NewGuid(),
                 BiometricEventId = evt.Id,
@@ -229,24 +264,14 @@ public sealed class BiometricRepository(AxonDbContext db) : IBiometricRepository
                 SerializedPayload = payload,   // EncryptionDecorator encrypts this in its layer
                 CreatedAtUnixMs = now.ToUnixTimeMilliseconds(),
                 RetryCount = 0,
-            }));
+            });
+            added++;
         }
 
-        if (added.Count == 0)
+        if (added == 0)
             return;
 
         // Single SaveChangesAsync = single SQLite transaction covering both tables
-        try
-        {
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            // The context outlives this call. Left tracked, the failed inserts would be
-            // retried (and fail again) by every later SaveChanges, audit writes included.
-            foreach (var entry in added)
-                entry.State = EntityState.Detached;
-            throw;
-        }
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 }

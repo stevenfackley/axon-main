@@ -13,11 +13,12 @@ namespace Axon.Infrastructure.Security;
 ///
 /// Guarantees:
 ///   • <see cref="LogAsync"/> always completes its own <c>SaveChangesAsync</c>
-///     call — writes are durable before the method returns to the decorator.
+///     call, on its own short-lived context — writes are durable before the
+///     method returns to the decorator.
 ///   • Caller identity is stored as a SHA-256 hash (hex) — never the raw
 ///     username or user ID, satisfying the GDPR minimisation principle.
 /// </summary>
-public sealed class DbAuditLogger(AxonDbContext db) : IAuditLogger
+public sealed class DbAuditLogger(IDbContextFactory<AxonDbContext> contexts) : IAuditLogger
 {
     public async ValueTask LogAsync(
         AuditOperation operation,
@@ -38,6 +39,9 @@ public sealed class DbAuditLogger(AxonDbContext db) : IAuditLogger
             Summary = summary,
         };
 
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         db.AuditLog.Add(entity);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
@@ -45,6 +49,9 @@ public sealed class DbAuditLogger(AxonDbContext db) : IAuditLogger
     public async ValueTask<IReadOnlyList<AuditLogEntry>> GetTrailAsync(
         string entityId, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         var entities = await db.AuditLog
             .AsNoTracking()
             .Where(e => e.AffectedEntityId == entityId)
