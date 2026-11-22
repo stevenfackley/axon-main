@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Axon.Core.Domain;
 using Axon.Infrastructure.Drivers.Oura;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Axon.Tests.Drivers;
@@ -259,5 +260,139 @@ public sealed class OuraDriverTests : IDisposable
             driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
 
         Assert.Empty(events);
+    }
+
+    // ── Request shape, error paths ──────────────────────────────────────────────
+
+    private static OuraDriver PatDriver(HttpClient http, CapturingLogger<OuraDriver>? logger = null) =>
+        new(new InMemoryOAuthTokenStore(), http, new OuraDriverOptions { PersonalAccessToken = "pat-123" },
+            logger ?? (ILogger<OuraDriver>)NullLogger<OuraDriver>.Instance);
+
+    private static bool IsReadiness(HttpRequestMessage req) =>
+        req.RequestUri!.AbsolutePath.EndsWith("daily_readiness", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Fetch_FollowsNextTokenByAppendingItToTheFirstUrl_WithTheBearerToken()
+    {
+        var readinessQueries = new List<string>();
+        var auth = new List<string?>();
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            auth.Add(req.Headers.Authorization?.ToString());
+            if (!IsReadiness(req))
+                return StubHttpMessageHandler.Json("""{"data":[]}""");
+            readinessQueries.Add(req.RequestUri!.Query);
+            var next = readinessQueries.Count < 3 ? $"cursor {readinessQueries.Count}" : null;
+            return StubHttpMessageHandler.Json(
+                JsonSerializer.Serialize(new OuraDailyReadinessList([SampleReadiness()], next)));
+        });
+
+        var events = await DriverTestHelpers.CollectAsync(
+            PatDriver(new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-7)));
+
+        Assert.Equal(3, readinessQueries.Count);
+        Assert.StartsWith("?start_date=", readinessQueries[0], StringComparison.Ordinal);
+        // Each cursor is appended to the first URL, not to the previous page's URL.
+        Assert.Equal(readinessQueries[0] + "&next_token=cursor%201", readinessQueries[1]);
+        Assert.Equal(readinessQueries[0] + "&next_token=cursor%202", readinessQueries[2]);
+        Assert.Equal(3, events.Count(e => e.Type == BiometricType.ReadinessScore));
+        Assert.Equal(7, auth.Count);
+        Assert.All(auth, a => Assert.Equal("Bearer pat-123", a));
+    }
+
+    [Fact]
+    public async Task Fetch_WhenOneEndpointFails_LogsTheUrlAndFetchesTheRest()
+    {
+        var handler = new StubHttpMessageHandler(req => IsReadiness(req)
+            ? StubHttpMessageHandler.Status(HttpStatusCode.InternalServerError)
+            : StubHttpMessageHandler.Json("""{"data":[]}"""));
+        var logger = new CapturingLogger<OuraDriver>();
+
+        var events = await DriverTestHelpers.CollectAsync(
+            PatDriver(new HttpClient(handler), logger).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Empty(events);
+        Assert.Equal(5, handler.RequestPaths.Count);
+        var error = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
+        Assert.Equal("Oura: API call failed for {Url}", error.Template);
+        Assert.Contains("/daily_readiness?start_date=", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fetch_MalformedPage_Throws()
+    {
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("not json"));
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(
+                PatDriver(new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1))));
+    }
+
+    [Fact]
+    public async Task ImportFile_NameMatchingTwoRoutes_UsesTheFirst()
+    {
+        var json = JsonSerializer.Serialize(new OuraDailyReadinessList([SampleReadiness()], null));
+        var path = _temp.WriteFile("sleep_readiness.json", json);
+
+        var events = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+
+        Assert.Contains(events, e => e.Type == BiometricType.ReadinessScore);
+    }
+
+    [Fact]
+    public async Task FetchAndImport_MatchPropertyNamesIgnoringCase()
+    {
+        var json = DriverTestHelpers.UpperCaseKeys(
+            JsonSerializer.Serialize(new OuraDailyReadinessList([SampleReadiness()], null)));
+        var path = _temp.WriteFile("readiness.json", json);
+        var handler = new StubHttpMessageHandler(req => IsReadiness(req)
+            ? StubHttpMessageHandler.Json(json)
+            : StubHttpMessageHandler.Json("""{"DATA":[]}"""));
+
+        var imported = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+        var fetched = await DriverTestHelpers.CollectAsync(
+            PatDriver(new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Contains(imported, e => e.Type == BiometricType.ReadinessScore);
+        Assert.Contains(fetched, e => e.Type == BiometricType.ReadinessScore);
+    }
+
+    [Fact]
+    public async Task ImportFile_SpO2DayWithoutAReading_IsSkipped()
+    {
+        var json = JsonSerializer.Serialize(new OuraSpO2List(
+            [new OuraSpO2Daily("spo2-0", "2026-01-14", null), SampleSpO2()], null));
+        var path = _temp.WriteFile("spo2.json", json);
+
+        var events = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+
+        Assert.Single(events);
+    }
+
+    [Fact]
+    public async Task ImportFile_UnrecognisedName_LogsAWarning()
+    {
+        var path = _temp.WriteFile("Mystery.json", "{}");
+        var logger = new CapturingLogger<OuraDriver>();
+        var driver = PatDriver(new HttpClient(StubHttpMessageHandler.ThrowingOnUse()), logger);
+
+        await DriverTestHelpers.CollectAsync(driver.ImportFileAsync(path));
+
+        Assert.Equal(
+            [
+                (LogLevel.Information, "Oura: Importing file {File}", "Oura: Importing file Mystery.json"),
+                (LogLevel.Warning, "Oura: Unrecognised export file name '{File}' — skipping.",
+                    "Oura: Unrecognised export file name 'mystery' — skipping."),
+            ],
+            logger.Entries);
+    }
+
+    [Fact]
+    public async Task ImportFile_MalformedFile_Throws()
+    {
+        var path = _temp.WriteFile("heartrate.json", "not json");
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path)));
     }
 }

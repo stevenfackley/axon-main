@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Microsoft.Extensions.Logging;
 
 namespace Axon.Tests.Drivers;
 
@@ -81,6 +82,11 @@ internal static class DriverTestHelpers
     public static OAuthTokenSet ValidToken(string access = "access-token") =>
         new(access, "refresh-token", DateTimeOffset.UtcNow.AddHours(1));
 
+    /// <summary>Upper-cases every property name in compact JSON, leaving the values alone.</summary>
+    public static string UpperCaseKeys(string json) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            json, "\"([^\"]+)\":", m => m.Value.ToUpperInvariant());
+
     /// <summary>Materialises an async event stream into a list.</summary>
     public static async Task<List<BiometricEvent>> CollectAsync(
         IAsyncEnumerable<BiometricEvent> source)
@@ -89,6 +95,29 @@ internal static class DriverTestHelpers
         await foreach (var e in source)
             list.Add(e);
         return list;
+    }
+}
+
+/// <summary>
+/// <see cref="ILogger{T}"/> that keeps every entry, with its message template, so a test
+/// can pin what a driver logs.
+/// </summary>
+internal sealed class CapturingLogger<T> : ILogger<T>
+{
+    public List<(LogLevel Level, string Template, string Message)> Entries { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        var template = state is IReadOnlyList<KeyValuePair<string, object?>> values
+            ? values.FirstOrDefault(v => v.Key == "{OriginalFormat}").Value as string
+            : null;
+        Entries.Add((logLevel, template ?? "", formatter(state, exception)));
     }
 }
 

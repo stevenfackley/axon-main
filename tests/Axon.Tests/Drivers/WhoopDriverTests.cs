@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Axon.Core.Domain;
 using Axon.Infrastructure.Drivers.Whoop;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Axon.Tests.Drivers;
@@ -259,5 +260,194 @@ public sealed class WhoopDriverTests : IDisposable
         Assert.Equal(2, recoveryCalls); // cursor was followed to the second page
         Assert.Equal(2, events.Count(e => e.Type == BiometricType.RecoveryScore));
         Assert.Contains(handler.RequestPaths, p => p.EndsWith("recovery", StringComparison.Ordinal));
+    }
+
+    // ── Request shape, error and cancellation paths ─────────────────────────────
+
+    private static WhoopDriver BuildDriver(
+        InMemoryOAuthTokenStore store, HttpClient http, CapturingLogger<WhoopDriver> logger)
+    {
+        var options = new WhoopDriverOptions { ClientId = "cid", ClientSecret = "secret" };
+        var auth = new WhoopAuthenticator(options, http, store, NullLogger<WhoopAuthenticator>.Instance);
+        return new WhoopDriver(store, http, options, auth, logger);
+    }
+
+    private static bool IsRecovery(HttpRequestMessage req) =>
+        req.RequestUri!.AbsolutePath.EndsWith("recovery", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Fetch_SendsTheBearerTokenAndStartLimitQuery_ThenTheCursor()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var recoveryQueries = new List<string>();
+        var auth = new List<string?>();
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            auth.Add(req.Headers.Authorization?.ToString());
+            if (!IsRecovery(req))
+                return StubHttpMessageHandler.Json("""{"records":[]}""");
+            recoveryQueries.Add(req.RequestUri!.Query);
+            var next = recoveryQueries.Count == 1 ? "page 2" : null;
+            return StubHttpMessageHandler.Json(
+                JsonSerializer.Serialize(new WhoopRecoveryList([SampleRecovery()], next)));
+        });
+        var driver = BuildDriver(store, new HttpClient(handler));
+        var since = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+
+        await DriverTestHelpers.CollectAsync(driver.FetchSinceAsync(since));
+
+        const string first = "?start=2026-01-10T00%3A00%3A00.0000000%2B00%3A00&limit=25";
+        Assert.Equal([first, first + "&nextToken=page%202"], recoveryQueries);
+        Assert.Equal(5, auth.Count);
+        Assert.All(auth, a => Assert.Equal("Bearer access-token", a));
+    }
+
+    [Fact]
+    public async Task Fetch_WhenOneEndpointFails_LogsItRaisesFetchIncompleteAndFetchesTheRest()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(req => IsRecovery(req)
+            ? StubHttpMessageHandler.Status(HttpStatusCode.InternalServerError)
+            : StubHttpMessageHandler.Json("""{"records":[]}"""));
+        var logger = new CapturingLogger<WhoopDriver>();
+        var driver = BuildDriver(store, new HttpClient(handler), logger);
+        int incomplete = 0;
+        driver.FetchIncomplete += (_, _) => incomplete++;
+
+        var events = await DriverTestHelpers.CollectAsync(
+            driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Empty(events);
+        Assert.Equal(4, handler.RequestPaths.Count);
+        Assert.Equal(1, incomplete);
+        var error = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
+        Assert.Equal("Whoop: API call failed for {Endpoint}", error.Template);
+        Assert.EndsWith("/developer/v1/recovery", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fetch_CancelledDuringASend_SwallowsThatSendThenThrowsBeforeTheNextEndpoint()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        using var cts = new CancellationTokenSource();
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+        var driver = BuildDriver(store, new HttpClient(handler));
+        int incomplete = 0;
+        driver.FetchIncomplete += (_, _) => incomplete++;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            DriverTestHelpers.CollectAsync(driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1), cts.Token)));
+
+        Assert.Single(handler.RequestPaths);
+        Assert.Equal(1, incomplete);
+    }
+
+    [Fact]
+    public async Task Fetch_MalformedPage_Throws()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("not json"));
+        var driver = BuildDriver(store, new HttpClient(handler));
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1))));
+    }
+
+    [Fact]
+    public async Task Fetch_NullPage_EndsThatEndpointWithoutFlaggingIt()
+    {
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(req => IsRecovery(req)
+            ? StubHttpMessageHandler.Json("null")
+            : StubHttpMessageHandler.Json("""{"records":[]}"""));
+        var driver = BuildDriver(store, new HttpClient(handler));
+        int incomplete = 0;
+        driver.FetchIncomplete += (_, _) => incomplete++;
+
+        var events = await DriverTestHelpers.CollectAsync(
+            driver.FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Empty(events);
+        Assert.Equal(4, handler.RequestPaths.Count);
+        Assert.Equal(0, incomplete);
+    }
+
+    [Fact]
+    public async Task ImportFile_NameMatchingTwoRoutes_UsesTheFirstAndIgnoresCase()
+    {
+        var json = JsonSerializer.Serialize(new WhoopRecoveryList([SampleRecovery()], null));
+        var path = _temp.WriteFile("Sleep-RECOVERY.json", json);
+
+        var events = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+
+        Assert.Contains(events, e => e.Type == BiometricType.RecoveryScore);
+    }
+
+    [Fact]
+    public async Task FetchAndImport_MatchPropertyNamesIgnoringCase()
+    {
+        var json = DriverTestHelpers.UpperCaseKeys(
+            JsonSerializer.Serialize(new WhoopRecoveryList([SampleRecovery()], null)));
+        var path = _temp.WriteFile("recovery.json", json);
+        var store = new InMemoryOAuthTokenStore(DriverId, DriverTestHelpers.ValidToken());
+        var handler = new StubHttpMessageHandler(req => IsRecovery(req)
+            ? StubHttpMessageHandler.Json(json)
+            : StubHttpMessageHandler.Json("""{"RECORDS":[]}"""));
+
+        var imported = await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path));
+        var fetched = await DriverTestHelpers.CollectAsync(
+            BuildDriver(store, new HttpClient(handler)).FetchSinceAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        Assert.Contains(imported, e => e.Type == BiometricType.RecoveryScore);
+        Assert.Contains(fetched, e => e.Type == BiometricType.RecoveryScore);
+    }
+
+    [Fact]
+    public async Task ImportFile_UnrecognisedName_LogsAWarning()
+    {
+        var path = _temp.WriteFile("Mystery.json", "{}");
+        var logger = new CapturingLogger<WhoopDriver>();
+        var driver = BuildDriver(new InMemoryOAuthTokenStore(),
+            new HttpClient(StubHttpMessageHandler.ThrowingOnUse()), logger);
+
+        await DriverTestHelpers.CollectAsync(driver.ImportFileAsync(path));
+
+        Assert.Equal(
+            [
+                (LogLevel.Information, "Whoop: Importing file {File}", "Whoop: Importing file Mystery.json"),
+                (LogLevel.Warning, "Whoop: Unrecognised export file name '{File}' — skipping.",
+                    "Whoop: Unrecognised export file name 'mystery' — skipping."),
+            ],
+            logger.Entries);
+    }
+
+    [Fact]
+    public async Task ImportFile_MalformedFile_Throws()
+    {
+        var path = _temp.WriteFile("recovery.json", "not json");
+
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
+            DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path)));
+    }
+
+    [Fact]
+    public async Task ImportFile_NullDocument_YieldsNothing()
+    {
+        var path = _temp.WriteFile("recovery.json", "null");
+
+        Assert.Empty(await DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path)));
+    }
+
+    [Fact]
+    public async Task ImportFile_MissingFile_Throws()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "axon-driver-tests", Guid.NewGuid().ToString("N"), "recovery.json");
+
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            DriverTestHelpers.CollectAsync(OfflineDriver().ImportFileAsync(path)));
     }
 }
