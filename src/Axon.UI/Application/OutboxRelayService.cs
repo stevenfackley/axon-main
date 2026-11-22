@@ -11,7 +11,8 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     private readonly ISyncOutboxRepository _outboxRepository;
     private readonly ISyncTransport _transport;
     private readonly IHealthReportWriter _healthReportWriter;
-    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(15));
+    private readonly AirGapState _airGapState;
+    private readonly PeriodicTimer _timer;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
@@ -21,18 +22,23 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     public OutboxRelayService(
         ISyncOutboxRepository outboxRepository,
         ISyncTransport transport,
-        IHealthReportWriter healthReportWriter)
+        IHealthReportWriter healthReportWriter,
+        AirGapState airGapState,
+        TimeProvider? timeProvider = null)
     {
         _outboxRepository = outboxRepository;
         _transport = transport;
         _healthReportWriter = healthReportWriter;
+        _airGapState = airGapState;
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(15), timeProvider ?? TimeProvider.System);
         _current = new RelaySnapshot(
-            State: RelayState.Idle,
+            State: airGapState.Enabled ? RelayState.AirGapped : RelayState.Idle,
             PendingCount: 0,
             LastSuccessfulSync: null,
             LastError: null,
-            AirGapEnabled: false,
+            AirGapEnabled: airGapState.Enabled,
             TransportName: transport.TransportName);
+        _airGapState.Changed += OnAirGapChanged;
     }
 
     public event EventHandler<RelaySnapshot>? SnapshotChanged;
@@ -48,7 +54,7 @@ internal sealed class OutboxRelayService : IOutboxRelayService
         _loopTask = Task.Run(() => RunLoopAsync(_loopCts.Token), CancellationToken.None);
     }
 
-    public void SetAirGapEnabled(bool enabled)
+    private void OnAirGapChanged(object? sender, bool enabled)
     {
         UpdateSnapshot(_current with
         {
@@ -63,6 +69,8 @@ internal sealed class OutboxRelayService : IOutboxRelayService
 
     public async ValueTask DisposeAsync()
     {
+        _airGapState.Changed -= OnAirGapChanged;
+
         if (_loopCts is not null)
         {
             _loopCts.Cancel();
@@ -91,7 +99,7 @@ internal sealed class OutboxRelayService : IOutboxRelayService
             while (await _timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
                 await PublishSnapshotAsync(ct).ConfigureAwait(false);
-                if (_current.AirGapEnabled)
+                if (_airGapState.Enabled)
                 {
                     continue;
                 }
@@ -218,7 +226,8 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     private async Task PublishSnapshotAsync(CancellationToken ct)
     {
         int pendingCount = await _outboxRepository.CountPendingAsync(ct).ConfigureAwait(false);
-        RelayState state = _current.AirGapEnabled
+        bool airGapped = _airGapState.Enabled;
+        RelayState state = airGapped
             ? RelayState.AirGapped
             : pendingCount > 0 && _current.State == RelayState.Syncing
                 ? RelayState.Syncing
@@ -229,7 +238,8 @@ internal sealed class OutboxRelayService : IOutboxRelayService
         UpdateSnapshot(_current with
         {
             PendingCount = pendingCount,
-            State = state
+            State = state,
+            AirGapEnabled = airGapped
         });
     }
 

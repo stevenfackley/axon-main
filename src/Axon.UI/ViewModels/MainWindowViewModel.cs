@@ -35,10 +35,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _airGapState = airGapState;
         _import = import;
         _license = license;
+        Settings = new SettingsViewModel(airGapState);
         Settings.ImportHandler = ImportFilesAsync;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
-        Settings.AirGapChanged += OnAirGapChanged;
+        _airGapState.Changed += OnAirGapStateChanged;
         Settings.TelemetryEnabledChanged += OnTelemetryEnabledChanged;
         Settings.TelemetryEnabled = _observabilityController.TelemetryEnabled;
         Settings.IsWhoopConfigured = _whoop.IsConfigured;
@@ -76,23 +77,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsSettingsActive => ActiveWorkspace == ShellWorkspace.Settings;
 
-    private bool _airGapEnabled;
+    /// <summary>
+    /// Air-Gap Mode, read from and written to the shared <see cref="AirGapState"/>, which
+    /// enforces it at the HTTP boundary (blocks outbound) and on the sync relay.
+    /// </summary>
     public bool AirGapEnabled
     {
-        get => _airGapEnabled;
-        set
-        {
-            if (!SetField(ref _airGapEnabled, value)) return;
-            if (Settings.AirGapEnabled != value)
-            {
-                Settings.AirGapEnabled = value;
-            }
-
-            // Enforce at the HTTP boundary (blocks outbound) and on the sync relay.
-            _airGapState.Enabled = value;
-            _outboxRelayService.SetAirGapEnabled(value);
-            SyncStatus = value ? SyncStatus.AirGapped : SyncStatus.Idle;
-        }
+        get => _airGapState.Enabled;
+        set => _airGapState.Enabled = value;
     }
 
     private SyncStatus _syncStatus = SyncStatus.Idle;
@@ -120,7 +112,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public AnalysisLabViewModel AnalysisLab { get; }
 
-    public SettingsViewModel Settings { get; } = new();
+    public SettingsViewModel Settings { get; }
 
     public async Task InitializeAsync()
     {
@@ -155,16 +147,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Settings.LastSyncError = snapshot.LastError;
         TransportName = snapshot.TransportName;
 
-        if (_airGapEnabled != snapshot.AirGapEnabled)
-        {
-            _airGapEnabled = snapshot.AirGapEnabled;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AirGapEnabled)));
-            if (Settings.AirGapEnabled != snapshot.AirGapEnabled)
-            {
-                Settings.AirGapEnabled = snapshot.AirGapEnabled;
-            }
-        }
-
         SyncStatus = snapshot.State switch
         {
             RelayState.Syncing => SyncStatus.Syncing,
@@ -174,14 +156,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         };
     }
 
-    private void OnAirGapChanged(object? sender, bool enabled)
+    private void OnAirGapStateChanged(object? sender, bool enabled)
     {
-        if (AirGapEnabled == enabled)
-        {
-            return;
-        }
-
-        AirGapEnabled = enabled;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AirGapEnabled)));
+        SyncStatus = enabled ? SyncStatus.AirGapped : SyncStatus.Idle;
     }
 
     private void OnTelemetryEnabledChanged(object? sender, bool enabled)
