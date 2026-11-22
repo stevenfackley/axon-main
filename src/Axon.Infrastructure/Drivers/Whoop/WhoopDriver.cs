@@ -1,6 +1,5 @@
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 using Microsoft.Extensions.Logging;
@@ -118,9 +117,9 @@ public sealed class WhoopDriver : IBiometricDriver
         var deviceId = _options.DeviceId ?? $"whoop:{_options.ClientId}";
 
         // ── Recovery ────────────────────────────────────────────────────────
-        await foreach (var evt in FetchPagedAsync<WhoopRecoveryList>(
+        await foreach (var evt in FetchPagedAsync(
                            $"{ApiBaseUrl}/recovery",
-                           since, token, ct,
+                           since, token, WhoopJsonContext.Default.WhoopRecoveryList, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(r =>
                                WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId)))
@@ -130,9 +129,9 @@ public sealed class WhoopDriver : IBiometricDriver
         }
 
         // ── Sleep ────────────────────────────────────────────────────────────
-        await foreach (var evt in FetchPagedAsync<WhoopSleepList>(
+        await foreach (var evt in FetchPagedAsync(
                            $"{ApiBaseUrl}/sleep",
-                           since, token, ct,
+                           since, token, WhoopJsonContext.Default.WhoopSleepList, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(s =>
                                WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId)))
@@ -142,9 +141,9 @@ public sealed class WhoopDriver : IBiometricDriver
         }
 
         // ── Cycle (Strain) ───────────────────────────────────────────────────
-        await foreach (var evt in FetchPagedAsync<WhoopCycleList>(
+        await foreach (var evt in FetchPagedAsync(
                            $"{ApiBaseUrl}/cycle",
-                           since, token, ct,
+                           since, token, WhoopJsonContext.Default.WhoopCycleList, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(c =>
                                WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId)))
@@ -154,9 +153,9 @@ public sealed class WhoopDriver : IBiometricDriver
         }
 
         // ── Workouts ─────────────────────────────────────────────────────────
-        await foreach (var evt in FetchPagedAsync<WhoopWorkoutList>(
+        await foreach (var evt in FetchPagedAsync(
                            $"{ApiBaseUrl}/workout",
-                           since, token, ct,
+                           since, token, WhoopJsonContext.Default.WhoopWorkoutList, ct,
                            page => page.NextToken,
                            page => page.Records.SelectMany(w =>
                                WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId)))
@@ -218,54 +217,30 @@ public sealed class WhoopDriver : IBiometricDriver
 
         _logger.LogInformation("Whoop: Importing file {File}", Path.GetFileName(jsonFilePath));
 
-        var stream = File.OpenRead(jsonFilePath);
-        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        try
+        // Routed on the file name; the first route whose key matches wins.
+        VendorFileImport.Route[] routes =
+        [
+            new(["recovery"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, WhoopJsonContext.Default.WhoopRecoveryList, list => list.Records,
+                r => WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId), t)),
+            new(["sleep"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, WhoopJsonContext.Default.WhoopSleepList, list => list.Records,
+                s => WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId), t)),
+            new(["cycle"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, WhoopJsonContext.Default.WhoopCycleList, list => list.Records,
+                c => WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId), t)),
+            new(["workout"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, WhoopJsonContext.Default.WhoopWorkoutList, list => list.Records,
+                w => WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId), t)),
+        ];
+
+        await foreach (var evt in VendorFileImport.ReadAsync(
+                           jsonFilePath, fileName, routes,
+                           name => _logger.LogWarning(
+                               "Whoop: Unrecognised export file name '{File}' — skipping.", name),
+                           ct).ConfigureAwait(false))
         {
-            if (fileName.Contains("recovery"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<WhoopRecoveryList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var r in list.Records)
-                        foreach (var evt in WhoopNormalizationMapper.MapRecovery(r, deviceId, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("sleep"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<WhoopSleepList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var s in list.Records)
-                        foreach (var evt in WhoopNormalizationMapper.MapSleep(s, deviceId, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("cycle"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<WhoopCycleList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var c in list.Records)
-                        foreach (var evt in WhoopNormalizationMapper.MapCycle(c, deviceId, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("workout"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<WhoopWorkoutList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var w in list.Records)
-                        foreach (var evt in WhoopNormalizationMapper.MapWorkout(w, deviceId, correlationId))
-                            yield return evt;
-            }
-            else
-            {
-                _logger.LogWarning("Whoop: Unrecognised export file name '{File}' — skipping.", fileName);
-            }
-        }
-        finally
-        {
-            await stream.DisposeAsync().ConfigureAwait(false);
+            yield return evt;
         }
     }
 
@@ -305,59 +280,33 @@ public sealed class WhoopDriver : IBiometricDriver
         string endpoint,
         DateTimeOffset since,
         OAuthTokenSet token,
+        JsonTypeInfo<TPage> pageType,
         [EnumeratorCancellation] CancellationToken ct,
         Func<TPage, string?> getNextToken,
         Func<TPage, IEnumerable<BiometricEvent>> mapPage)
         where TPage : class
     {
-        string? nextToken = null;
         var sinceStr = since.ToUniversalTime().ToString("O");
 
-        do
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var url = $"{endpoint}?start={Uri.EscapeDataString(sinceStr)}&limit=25"
-                    + (nextToken is not null ? $"&nextToken={Uri.EscapeDataString(nextToken)}" : "");
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
-
-            HttpResponseMessage response;
-            try
-            {
-                response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-            }
-            catch (Exception ex)
+        var pages = VendorHttpReader.GetPagesAsync(
+            _http,
+            nextToken => $"{endpoint}?start={Uri.EscapeDataString(sinceStr)}&limit=25"
+                       + (nextToken is not null ? $"&nextToken={Uri.EscapeDataString(nextToken)}" : ""),
+            token.AccessToken,
+            pageType,
+            getNextToken,
+            (ex, _) =>
             {
                 _logger.LogError(ex, "Whoop: API call failed for {Endpoint}", endpoint);
                 FetchIncomplete?.Invoke(this, EventArgs.Empty);
-                yield break;
-            }
+            },
+            ct);
 
-            var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            TPage? page = null;
-            try
-            {
-                page = await JsonSerializer.DeserializeAsync<TPage>(
-                    stream,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                    ct).ConfigureAwait(false);
-            }
-            finally
-            {
-                await stream.DisposeAsync().ConfigureAwait(false);
-            }
-
-            if (page is null) yield break;
-
+        await foreach (var page in pages.ConfigureAwait(false))
+        {
             foreach (var evt in mapPage(page))
                 yield return evt;
-
-            nextToken = getNextToken(page);
-
-        } while (nextToken is not null);
+        }
     }
 }
 

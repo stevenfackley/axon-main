@@ -1,6 +1,5 @@
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 using Microsoft.Extensions.Logging;
@@ -110,8 +109,8 @@ public sealed class GarminDriver : IBiometricDriver
         var dailyUrl = $"{ApiBaseUrl}/dailies?uploadStartTimeInSeconds={startEpoch}" +
                        $"&uploadEndTimeInSeconds={endEpoch}";
 
-        await foreach (var evt in FetchAndMapAsync<GarminDailySummaryList>(
-                           dailyUrl, token, ct,
+        await foreach (var evt in FetchAndMapAsync(
+                           dailyUrl, token, GarminJsonContext.Default.GarminDailySummaryList, ct,
                            list => list.Dailies.SelectMany(d =>
                                GarminNormalizationMapper.MapDailySummary(d, correlationId)))
                            .ConfigureAwait(false))
@@ -123,8 +122,8 @@ public sealed class GarminDriver : IBiometricDriver
         var sleepUrl = $"{ApiBaseUrl}/sleeps?uploadStartTimeInSeconds={startEpoch}" +
                        $"&uploadEndTimeInSeconds={endEpoch}";
 
-        await foreach (var evt in FetchAndMapAsync<GarminSleepSummaryList>(
-                           sleepUrl, token, ct,
+        await foreach (var evt in FetchAndMapAsync(
+                           sleepUrl, token, GarminJsonContext.Default.GarminSleepSummaryList, ct,
                            list => list.Sleeps.SelectMany(s =>
                                GarminNormalizationMapper.MapSleepSummary(s, correlationId)))
                            .ConfigureAwait(false))
@@ -136,8 +135,8 @@ public sealed class GarminDriver : IBiometricDriver
         var hrvUrl = $"{ApiBaseUrl}/hrv?uploadStartTimeInSeconds={startEpoch}" +
                      $"&uploadEndTimeInSeconds={endEpoch}";
 
-        await foreach (var evt in FetchAndMapAsync<GarminHrvSummaryList>(
-                           hrvUrl, token, ct,
+        await foreach (var evt in FetchAndMapAsync(
+                           hrvUrl, token, GarminJsonContext.Default.GarminHrvSummaryList, ct,
                            list => list.HrvSummaries.SelectMany(h =>
                                GarminNormalizationMapper.MapHrvSummary(h, correlationId)))
                            .ConfigureAwait(false))
@@ -149,8 +148,8 @@ public sealed class GarminDriver : IBiometricDriver
         var bodyUrl = $"{ApiBaseUrl}/bodyComps?uploadStartTimeInSeconds={startEpoch}" +
                       $"&uploadEndTimeInSeconds={endEpoch}";
 
-        await foreach (var evt in FetchAndMapAsync<GarminBodyCompositionList>(
-                           bodyUrl, token, ct,
+        await foreach (var evt in FetchAndMapAsync(
+                           bodyUrl, token, GarminJsonContext.Default.GarminBodyCompositionList, ct,
                            list => list.Compositions.SelectMany(c =>
                                GarminNormalizationMapper.MapBodyComposition(c, correlationId)))
                            .ConfigureAwait(false))
@@ -207,57 +206,33 @@ public sealed class GarminDriver : IBiometricDriver
     {
         correlationId ??= Guid.NewGuid().ToString("N");
         var fileName = Path.GetFileNameWithoutExtension(jsonFilePath).ToLowerInvariant();
-        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         _logger.LogInformation("Garmin: Importing file {File}", Path.GetFileName(jsonFilePath));
 
-        var stream = File.OpenRead(jsonFilePath);
-        try
+        // Routed on the file name; the first route whose key matches wins.
+        VendorFileImport.Route[] routes =
+        [
+            new(["daily", "activit"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, GarminJsonContext.Default.GarminDailySummaryList, list => list.Dailies,
+                d => GarminNormalizationMapper.MapDailySummary(d, correlationId), t)),
+            new(["sleep"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, GarminJsonContext.Default.GarminSleepSummaryList, list => list.Sleeps,
+                s => GarminNormalizationMapper.MapSleepSummary(s, correlationId), t)),
+            new(["hrv"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, GarminJsonContext.Default.GarminHrvSummaryList, list => list.HrvSummaries,
+                h => GarminNormalizationMapper.MapHrvSummary(h, correlationId), t)),
+            new(["body", "weight"], (stream, t) => VendorFileImport.ParseAsync(
+                stream, GarminJsonContext.Default.GarminBodyCompositionList, list => list.Compositions,
+                c => GarminNormalizationMapper.MapBodyComposition(c, correlationId), t)),
+        ];
+
+        await foreach (var evt in VendorFileImport.ReadAsync(
+                           jsonFilePath, fileName, routes,
+                           name => _logger.LogWarning(
+                               "Garmin: Unrecognised export file name '{File}' — skipping.", name),
+                           ct).ConfigureAwait(false))
         {
-            if (fileName.Contains("daily") || fileName.Contains("activit"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<GarminDailySummaryList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var d in list.Dailies)
-                        foreach (var evt in GarminNormalizationMapper.MapDailySummary(d, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("sleep"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<GarminSleepSummaryList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var s in list.Sleeps)
-                        foreach (var evt in GarminNormalizationMapper.MapSleepSummary(s, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("hrv"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<GarminHrvSummaryList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var h in list.HrvSummaries)
-                        foreach (var evt in GarminNormalizationMapper.MapHrvSummary(h, correlationId))
-                            yield return evt;
-            }
-            else if (fileName.Contains("body") || fileName.Contains("weight"))
-            {
-                var list = await JsonSerializer.DeserializeAsync<GarminBodyCompositionList>(
-                    stream, jsonOptions, ct).ConfigureAwait(false);
-                if (list is not null)
-                    foreach (var c in list.Compositions)
-                        foreach (var evt in GarminNormalizationMapper.MapBodyComposition(c, correlationId))
-                            yield return evt;
-            }
-            else
-            {
-                _logger.LogWarning("Garmin: Unrecognised export file name '{File}' — skipping.", fileName);
-            }
-        }
-        finally
-        {
-            await stream.DisposeAsync().ConfigureAwait(false);
+            yield return evt;
         }
     }
 
@@ -266,48 +241,29 @@ public sealed class GarminDriver : IBiometricDriver
     private async IAsyncEnumerable<BiometricEvent> FetchAndMapAsync<TResponse>(
         string url,
         OAuthTokenSet token,
+        JsonTypeInfo<TResponse> responseType,
         [EnumeratorCancellation] CancellationToken ct,
         Func<TResponse, IEnumerable<BiometricEvent>> map)
         where TResponse : class
     {
-        ct.ThrowIfCancellationRequested();
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
         // Garmin Health API uses OAuth2 bearer tokens for server-to-server calls.
         // Note: user-facing Garmin Connect uses OAuth 1.0a; Health API partner access
         // uses OAuth 2.0. Adjust header format once access is provisioned.
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+        // The responses are not paged, so there is never a next cursor.
+        var responses = VendorHttpReader.GetPagesAsync(
+            _http,
+            _ => url,
+            token.AccessToken,
+            responseType,
+            _ => null,
+            (ex, _) => _logger.LogError(ex, "Garmin: API call failed for {Url}", url),
+            ct);
 
-        HttpResponseMessage response;
-        try
+        await foreach (var result in responses.ConfigureAwait(false))
         {
-            response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            foreach (var evt in map(result))
+                yield return evt;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Garmin: API call failed for {Url}", url);
-            yield break;
-        }
-
-        var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        TResponse? result = null;
-        try
-        {
-            result = await JsonSerializer.DeserializeAsync<TResponse>(
-                stream,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            await stream.DisposeAsync().ConfigureAwait(false);
-        }
-
-        if (result is null) yield break;
-
-        foreach (var evt in map(result))
-            yield return evt;
     }
 }
 
