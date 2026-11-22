@@ -64,6 +64,13 @@ public sealed class WhoopDriver : IBiometricDriver
         _logger = logger;
     }
 
+    /// <summary>
+    /// Raised when <see cref="FetchSinceAsync"/> skips data because no usable token was
+    /// found or an API call failed. The fetch still completes without throwing, so a caller
+    /// that keeps a sync watermark needs this to avoid moving it past data it never got.
+    /// </summary>
+    public event EventHandler? FetchIncomplete;
+
     // ── IBiometricDriver: availability ────────────────────────────────────────
 
     /// <inheritdoc/>
@@ -103,6 +110,7 @@ public sealed class WhoopDriver : IBiometricDriver
         if (token is null)
         {
             _logger.LogWarning("Whoop: No valid OAuth token — skipping API fetch.");
+            FetchIncomplete?.Invoke(this, EventArgs.Empty);
             yield break;
         }
 
@@ -324,6 +332,7 @@ public sealed class WhoopDriver : IBiometricDriver
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Whoop: API call failed for {Endpoint}", endpoint);
+                FetchIncomplete?.Invoke(this, EventArgs.Empty);
                 yield break;
             }
 
