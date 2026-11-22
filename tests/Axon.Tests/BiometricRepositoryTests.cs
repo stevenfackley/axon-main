@@ -30,8 +30,12 @@ public sealed class BiometricRepositoryTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* best-effort */ }
     }
 
-    private async Task<AxonDbContext> NewContextAsync() =>
-        await new AxonDbContextFactory(new MockHardwareVault()).CreateAsync(_dir);
+    private async Task<AxonDbContextFactory> NewVaultAsync()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+        await factory.InitialiseAsync(_dir);
+        return factory;
+    }
 
     private static BiometricEvent MakeEvent(Guid id, double value = 72, string unit = "bpm") =>
         new(
@@ -45,10 +49,16 @@ public sealed class BiometricRepositoryTests : IDisposable
     private static Task<IReadOnlyList<BiometricEvent>> StoredAsync(BiometricRepository repo) =>
         repo.QueryRangeAsync(BiometricType.HeartRate, Ts.AddHours(-1), Ts.AddHours(1)).AsTask();
 
+    private static async Task<int> CountOutboxAsync(AxonDbContextFactory db)
+    {
+        await using var ctx = db.CreateDbContext();
+        return await ctx.SyncOutbox.CountAsync();
+    }
+
     [Fact]
     public async Task IngestBatch_SameEventTwice_StoresItOnce()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var evt = MakeEvent(Guid.NewGuid());
 
@@ -56,13 +66,13 @@ public sealed class BiometricRepositoryTests : IDisposable
         await repo.IngestBatchAsync([evt]); // re-import of the same sample
 
         Assert.Single(await StoredAsync(repo));
-        Assert.Equal(1, await db.SyncOutbox.CountAsync());
+        Assert.Equal(1, await CountOutboxAsync(db));
     }
 
     [Fact]
     public async Task IngestBatch_DuplicateIdsInOneBatch_StoresOne()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var id = Guid.NewGuid();
 
@@ -70,13 +80,13 @@ public sealed class BiometricRepositoryTests : IDisposable
 
         var stored = Assert.Single(await StoredAsync(repo));
         Assert.Equal(60, stored.Value);
-        Assert.Equal(1, await db.SyncOutbox.CountAsync());
+        Assert.Equal(1, await CountOutboxAsync(db));
     }
 
     [Fact]
     public async Task IngestBatch_AfterAFailedSave_LaterBatchesStillSave()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
 
         // Unit is NOT NULL in the schema, so this save fails inside SQLite.
@@ -103,7 +113,7 @@ public sealed class BiometricRepositoryTests : IDisposable
     [Fact]
     public async Task QueryAndStreamRange_ReturnOneTypeInAHalfOpenRangeOldestFirst()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var later = At(Ts.AddMinutes(30), BiometricType.HeartRate, 70);
         var first = At(Ts, BiometricType.HeartRate, 60);
@@ -123,7 +133,7 @@ public sealed class BiometricRepositoryTests : IDisposable
     [Fact]
     public async Task GetAggregates_GroupsIntoFixedWidthBuckets()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         await repo.IngestBatchAsync(
         [
@@ -142,7 +152,7 @@ public sealed class BiometricRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestVitals_ReturnsTheNewestEventPerType()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var olderHr = At(Ts, BiometricType.HeartRate, 60);
         var newerHr = At(Ts.AddHours(1), BiometricType.HeartRate, 65);
@@ -159,7 +169,7 @@ public sealed class BiometricRepositoryTests : IDisposable
     [Fact]
     public async Task AddThenDelete_RoundTripsThroughGetById()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var evt = MakeEvent(Guid.NewGuid());
 
@@ -174,10 +184,10 @@ public sealed class BiometricRepositoryTests : IDisposable
     public async Task Update_OfAnEventStoredEarlier_ReplacesItsValue()
     {
         var evt = MakeEvent(Guid.NewGuid(), value: 60);
-        await using (var first = await NewContextAsync())
-            await new BiometricRepository(first).AddAsync(evt);
+        var first = await NewVaultAsync();
+        await new BiometricRepository(first).AddAsync(evt);
 
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         await repo.UpdateAsync(evt with { Value = 99 });
 
@@ -185,42 +195,44 @@ public sealed class BiometricRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Update_AfterAddOnTheSameContext_ThrowsBecauseTheAddIsStillTracked()
+    public async Task Update_AfterAddOnTheSameRepository_ReplacesItsValue()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
         var evt = MakeEvent(Guid.NewGuid(), value: 60);
         await repo.AddAsync(evt);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await repo.UpdateAsync(evt with { Value = 99 }));
+        await repo.UpdateAsync(evt with { Value = 99 });
+
+        Assert.Equal(99, (await repo.GetByIdAsync(evt.Id))!.Value);
     }
 
     [Fact]
-    public async Task Add_AfterAFailedAdd_FailsAgainBecauseTheFailedInsertIsStillTracked()
+    public async Task Add_AfterAFailedAdd_StillSaves()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new BiometricRepository(db);
 
         // Unit is NOT NULL in the schema, so this save fails inside SQLite.
         await Assert.ThrowsAsync<DbUpdateException>(
             async () => await repo.AddAsync(MakeEvent(Guid.NewGuid(), unit: null!)));
 
-        await Assert.ThrowsAsync<DbUpdateException>(
-            async () => await repo.AddAsync(MakeEvent(Guid.NewGuid())));
-        Assert.Empty(await StoredAsync(repo));
+        var good = MakeEvent(Guid.NewGuid());
+        await repo.AddAsync(good);
+        Assert.Equal(good, Assert.Single(await StoredAsync(repo)));
     }
 
     [Fact]
     public async Task AuditedRead_WritesOneAuditRowToTheVault()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new AuditLoggingDecorator(
             new BiometricRepository(db), new DbAuditLogger(db), callerIdentity: "tester");
 
         await repo.QueryRangeAsync(BiometricType.HeartRate, Ts, Ts.AddHours(1));
 
-        var row = Assert.Single(await db.AuditLog.AsNoTracking().ToListAsync());
+        await using var ctx = db.CreateDbContext();
+        var row = Assert.Single(await ctx.AuditLog.AsNoTracking().ToListAsync());
         Assert.StartsWith("QueryRange: Type=HeartRate", row.Summary);
         Assert.Equal((byte)AuditOperation.Read, row.Operation);
     }

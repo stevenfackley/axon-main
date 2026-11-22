@@ -26,8 +26,12 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* best-effort */ }
     }
 
-    private async Task<AxonDbContext> NewContextAsync() =>
-        await new AxonDbContextFactory(new MockHardwareVault()).CreateAsync(_dir);
+    private async Task<AxonDbContextFactory> NewVaultAsync()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+        await factory.InitialiseAsync(_dir);
+        return factory;
+    }
 
     private static SyncOutboxEntry Entry(DateTimeOffset createdAt, DateTimeOffset? processedAt = null) =>
         new(Guid.NewGuid(), Guid.NewGuid(), "corr-1", "{}", createdAt, processedAt, 0, null);
@@ -35,7 +39,7 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
     [Fact]
     public async Task GetPending_ReturnsUnprocessedEntriesOldestFirstUpToTheBatchSize()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new SyncOutboxRepository(db);
         var newest = Entry(Ts.AddMinutes(2));
         var oldest = Entry(Ts);
@@ -52,7 +56,7 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
     [Fact]
     public async Task MarkProcessed_TakesTheEntryOutOfPending()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new SyncOutboxRepository(db);
         var sent = Entry(Ts);
         var waiting = Entry(Ts.AddMinutes(1));
@@ -67,7 +71,7 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
     [Fact]
     public async Task MarkFailed_CountsRetriesKeepsTheLatestErrorAndStaysPending()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new SyncOutboxRepository(db);
         var entry = Entry(Ts);
         await repo.AddAsync(entry);
@@ -83,7 +87,7 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
     [Fact]
     public async Task PurgeOld_DeletesOnlyEntriesProcessedBeforeTheRetentionCutoff()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new SyncOutboxRepository(db);
         var longAgo = Entry(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
             processedAt: new DateTimeOffset(2020, 1, 2, 0, 0, 0, TimeSpan.Zero));
@@ -101,7 +105,7 @@ public sealed class SyncOutboxRepositoryTests : IDisposable
     [Fact]
     public async Task Delete_RemovesTheEntry()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new SyncOutboxRepository(db);
         var entry = Entry(Ts);
         await repo.AddAsync(entry);

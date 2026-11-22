@@ -24,13 +24,17 @@ public sealed class TagRepositoryTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* best-effort */ }
     }
 
-    private async Task<AxonDbContext> NewContextAsync() =>
-        await new AxonDbContextFactory(new MockHardwareVault()).CreateAsync(_dir);
+    private async Task<AxonDbContextFactory> NewVaultAsync()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+        await factory.InitialiseAsync(_dir);
+        return factory;
+    }
 
     [Fact]
     public async Task AddTag_ThenGetTags_RoundTrips()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new TagRepository(db);
 
         await repo.AddTagAsync(new Tag(Guid.NewGuid(), "caffeine", "stimulant"));
@@ -42,7 +46,7 @@ public sealed class TagRepositoryTests : IDisposable
     [Fact]
     public async Task AddAnnotation_ThenQueryRange_ReturnsOnlyInRange()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var repo = new TagRepository(db);
 
         var tagId = Guid.NewGuid();

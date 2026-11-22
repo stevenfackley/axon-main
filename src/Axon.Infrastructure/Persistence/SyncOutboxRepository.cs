@@ -8,16 +8,23 @@ namespace Axon.Infrastructure.Persistence;
 /// <summary>
 /// Concrete EF Core adapter for <see cref="ISyncOutboxRepository"/>.
 ///
+/// Every method works on its own short-lived <see cref="AxonDbContext"/> from
+/// <paramref name="contexts"/>, so the relay's background loop never shares a context
+/// with the UI.
+///
 /// All mutation methods (<see cref="MarkProcessedAsync"/>, <see cref="MarkFailedAsync"/>)
 /// use <c>ExecuteUpdateAsync</c> — a single-round-trip UPDATE with no entity tracking,
 /// fulfilling the "no I/O inside a DB transaction" guardrail.
 /// </summary>
-public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxRepository
+public sealed class SyncOutboxRepository(IDbContextFactory<AxonDbContext> contexts) : ISyncOutboxRepository
 {
     // ── IRepository<SyncOutboxEntry, Guid> ───────────────────────────────────
 
     public async ValueTask<SyncOutboxEntry?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         var entity = await db.SyncOutbox
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.Id == id, ct)
@@ -27,6 +34,9 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
 
     public async ValueTask AddAsync(SyncOutboxEntry entry, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         db.SyncOutbox.Add(SyncOutboxMapper.ToEntity(entry));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
@@ -34,6 +44,9 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
     public async ValueTask AddRangeAsync(
         IReadOnlyList<SyncOutboxEntry> entries, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         foreach (var e in entries)
             db.SyncOutbox.Add(SyncOutboxMapper.ToEntity(e));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -41,12 +54,18 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
 
     public async ValueTask UpdateAsync(SyncOutboxEntry entry, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         db.SyncOutbox.Update(SyncOutboxMapper.ToEntity(entry));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     public async ValueTask DeleteAsync(Guid id, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         await db.SyncOutbox
             .Where(e => e.Id == id)
             .ExecuteDeleteAsync(ct)
@@ -58,6 +77,9 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
     public async ValueTask<IReadOnlyList<SyncOutboxEntry>> GetPendingAsync(
         int batchSize = 100, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         var entities = await db.SyncOutbox
             .AsNoTracking()
             .Where(e => e.ProcessedAtUnixMs == null)
@@ -72,14 +94,24 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
         return result;
     }
 
-    public ValueTask<int> CountPendingAsync(CancellationToken ct = default) =>
-        new(db.SyncOutbox
+    public async ValueTask<int> CountPendingAsync(CancellationToken ct = default)
+    {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
+        return await db.SyncOutbox
             .AsNoTracking()
-            .CountAsync(e => e.ProcessedAtUnixMs == null, ct));
+            .CountAsync(e => e.ProcessedAtUnixMs == null, ct)
+            .ConfigureAwait(false);
+    }
 
     public async ValueTask MarkProcessedAsync(Guid entryId, CancellationToken ct = default)
     {
         long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         await db.SyncOutbox
             .Where(e => e.Id == entryId)
             .ExecuteUpdateAsync(s => s
@@ -89,6 +121,9 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
 
     public async ValueTask MarkFailedAsync(Guid entryId, string error, CancellationToken ct = default)
     {
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
+
         await db.SyncOutbox
             .Where(e => e.Id == entryId)
             .ExecuteUpdateAsync(s => s
@@ -102,6 +137,9 @@ public sealed class SyncOutboxRepository(AxonDbContext db) : ISyncOutboxReposito
         long cutoffMs = DateTimeOffset.UtcNow
             .AddDays(-retentionDays)
             .ToUnixTimeMilliseconds();
+
+        var db = contexts.CreateDbContext();
+        await using var dispose = db.ConfigureAwait(false);
 
         await db.SyncOutbox
             .Where(e => e.ProcessedAtUnixMs != null && e.ProcessedAtUnixMs < cutoffMs)

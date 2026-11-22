@@ -1,4 +1,5 @@
 using System.Globalization;
+using Axon.Core.Domain;
 using Axon.Infrastructure.Persistence;
 using Axon.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
@@ -6,8 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Axon.Tests;
 
 /// <summary>
-/// Pins the SQLite settings the vault's connections run with once
-/// <see cref="AxonDbContextFactory"/> has created and migrated the database.
+/// Pins the SQLite settings every vault connection runs with once
+/// <see cref="AxonDbContextFactory"/> has created and migrated the database, and that
+/// each repository call gets its own context.
 /// </summary>
 public sealed class VaultConnectionTests : IDisposable
 {
@@ -26,18 +28,17 @@ public sealed class VaultConnectionTests : IDisposable
 
     private static async Task<string> PragmaAsync(AxonDbContext db, string name)
     {
-        var connection = db.Database.GetDbConnection();
-        bool wasOpen = connection.State == System.Data.ConnectionState.Open;
-        if (!wasOpen) await connection.OpenAsync();
+        // Opened through EF Core, as the repositories do, not on the raw ADO.NET connection.
+        await db.Database.OpenConnectionAsync();
         try
         {
-            using var command = connection.CreateCommand();
+            using var command = db.Database.GetDbConnection().CreateCommand();
             command.CommandText = $"PRAGMA {name};";
             return Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture)!;
         }
         finally
         {
-            if (!wasOpen) await connection.CloseAsync();
+            await db.Database.CloseConnectionAsync();
         }
     }
 
@@ -49,11 +50,68 @@ public sealed class VaultConnectionTests : IDisposable
         Assert.Equal("1", await PragmaAsync(db, "foreign_keys"));
     }
 
+    private async Task<AxonDbContextFactory> NewVaultAsync()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+        await factory.InitialiseAsync(_dir);
+        return factory;
+    }
+
     [Fact]
     public async Task Vault_ConnectionRunsWithWalAndTheTunedPragmas()
     {
-        await using var db = await new AxonDbContextFactory(new MockHardwareVault()).CreateAsync(_dir);
+        var factory = await NewVaultAsync();
+        await using var db = factory.CreateDbContext();
 
         await AssertTunedAsync(db);
+    }
+
+    [Fact]
+    public async Task Vault_ASecondConnectionOpenedWhileTheFirstIsBusy_GetsTheSamePragmas()
+    {
+        var factory = await NewVaultAsync();
+        await using var first = factory.CreateDbContext();
+        await first.Database.OpenConnectionAsync(); // holds the pooled connection
+
+        await using var second = factory.CreateDbContext();
+        await AssertTunedAsync(second);
+    }
+
+    [Fact]
+    public void CreateDbContext_BeforeInitialise_Throws()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+
+        Assert.Throws<InvalidOperationException>(() => factory.CreateDbContext());
+    }
+
+    [Fact]
+    public async Task Repositories_UsedFromTwoThreadsAtOnce_DoNotShareAContext()
+    {
+        var factory = await NewVaultAsync();
+        var events = new BiometricRepository(factory);
+        var outbox = new SyncOutboxRepository(factory);
+        var ts = new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero);
+
+        var writer = Task.Run(async () =>
+        {
+            for (int i = 0; i < 25; i++)
+            {
+                await events.IngestBatchAsync(
+                [
+                    new BiometricEvent(Guid.NewGuid(), ts.AddMinutes(i), BiometricType.HeartRate, 60, "bpm",
+                        new SourceMetadata("dev-1", "Test", null, 0.9f, ts)),
+                ]);
+            }
+        });
+        var reader = Task.Run(async () =>
+        {
+            for (int i = 0; i < 25; i++)
+                await outbox.CountPendingAsync();
+        });
+
+        await Task.WhenAll(writer, reader);
+
+        Assert.Equal(25, await outbox.CountPendingAsync());
     }
 }

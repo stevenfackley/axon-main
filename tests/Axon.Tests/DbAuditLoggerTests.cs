@@ -24,13 +24,17 @@ public sealed class DbAuditLoggerTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* best-effort */ }
     }
 
-    private async Task<AxonDbContext> NewContextAsync() =>
-        await new AxonDbContextFactory(new MockHardwareVault()).CreateAsync(_dir);
+    private async Task<AxonDbContextFactory> NewVaultAsync()
+    {
+        var factory = new AxonDbContextFactory(new MockHardwareVault());
+        await factory.InitialiseAsync(_dir);
+        return factory;
+    }
 
     [Fact]
     public async Task Log_StoresTheCallerAsASha256Hash_AndGetTrailFiltersByEntity()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var logger = new DbAuditLogger(db);
 
         await logger.LogAsync(AuditOperation.Read, "Repo", "test-user", "entity-1", "first read");
@@ -49,7 +53,7 @@ public sealed class DbAuditLoggerTests : IDisposable
     [Fact]
     public async Task GetTrail_ForAnUnknownEntity_IsEmpty()
     {
-        await using var db = await NewContextAsync();
+        var db = await NewVaultAsync();
         var logger = new DbAuditLogger(db);
         await logger.LogAsync(AuditOperation.Read, "Repo", "test-user", "entity-1", "read");
 
