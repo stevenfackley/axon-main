@@ -43,6 +43,36 @@ internal static class DriverUtilities
             FirmwareVersion: firmwareVersion,
             ConfidenceScore: confidenceScore,
             IngestionTimestamp: DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Builds a normalised <see cref="BiometricEvent"/> for a vendor mapper: the Id comes from
+    /// <see cref="DeterministicId"/> and the provenance from <see cref="BuildSource"/>.
+    /// </summary>
+    public static BiometricEvent MakeEvent(
+        string vendor,
+        float confidenceScore,
+        string deviceId,
+        DateTimeOffset timestamp,
+        BiometricType type,
+        double value,
+        string unit,
+        string? correlationId) =>
+        new(
+            Id: DeterministicId(vendor, deviceId, timestamp, type),
+            Timestamp: timestamp,
+            Type: type,
+            Value: value,
+            Unit: unit,
+            Source: BuildSource(vendor, deviceId, confidenceScore),
+            CorrelationId: correlationId);
+
+    /// <summary>
+    /// Parses a vendor ISO-8601 timestamp, keeping the offset it was sent with.
+    /// </summary>
+    public static DateTimeOffset ParseTimestamp(string iso8601)
+        => DateTimeOffset.Parse(iso8601,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
 }
 
 /// <summary>
