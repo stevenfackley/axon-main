@@ -16,6 +16,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly AirGapState _airGapState;
     private readonly DataImportCoordinator _import;
     private readonly LicenseContext _license;
+    private readonly DataWipeService _wipe;
+    private readonly DelegateCommand _showDashboardCommand;
+    private readonly DelegateCommand _showAnalysisLabCommand;
 
     internal MainWindowViewModel(
         DashboardViewModel dashboard,
@@ -25,7 +28,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         WhoopSyncCoordinator whoop,
         AirGapState airGapState,
         DataImportCoordinator import,
-        LicenseContext license)
+        LicenseContext license,
+        DataWipeService wipe)
     {
         Dashboard = dashboard;
         AnalysisLab = analysisLab;
@@ -35,8 +39,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _airGapState = airGapState;
         _import = import;
         _license = license;
+        _wipe = wipe;
         Settings = new SettingsViewModel(airGapState);
         Settings.ImportHandler = ImportFilesAsync;
+        Settings.EraseHandler = EraseAllDataAsync;
         _outboxRelayService.SnapshotChanged += OnRelaySnapshotChanged;
 
         _airGapState.Changed += OnAirGapStateChanged;
@@ -47,16 +53,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Settings.WhoopSyncRequested += OnWhoopSyncRequested;
         Settings.OpenDataFolderRequested += OnOpenDataFolderRequested;
 
-        ShowDashboardCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Dashboard);
-        ShowAnalysisLabCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.AnalysisLab);
+        _showDashboardCommand = new DelegateCommand(
+            () => ActiveWorkspace = ShellWorkspace.Dashboard, () => !Settings.IsDataErased);
+        _showAnalysisLabCommand = new DelegateCommand(
+            () => ActiveWorkspace = ShellWorkspace.AnalysisLab, () => !Settings.IsDataErased);
         ShowSettingsCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Settings);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public ICommand ShowDashboardCommand { get; }
+    public ICommand ShowDashboardCommand => _showDashboardCommand;
 
-    public ICommand ShowAnalysisLabCommand { get; }
+    public ICommand ShowAnalysisLabCommand => _showAnalysisLabCommand;
 
     public ICommand ShowSettingsCommand { get; }
 
@@ -236,6 +244,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             Settings.ImportStatusText = $"Import failed: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// Settings has already locked itself to the erase card. The dashboard and the lab still
+    /// hold readings in memory and read from the vault being erased, so they stay closed
+    /// from here on; after a complete erase the person closes the app.
+    /// </summary>
+    private async Task<DataWipeResult> EraseAllDataAsync()
+    {
+        ActiveWorkspace = ShellWorkspace.Settings;
+        _showDashboardCommand.RaiseCanExecuteChanged();
+        _showAnalysisLabCommand.RaiseCanExecuteChanged();
+        // File deletes and their retries run off the UI thread.
+        return await Task.Run(_wipe.WipeAsync);
     }
 
     private void OnOpenDataFolderRequested(object? sender, EventArgs e)

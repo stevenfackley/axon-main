@@ -1,5 +1,7 @@
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Axon.Core.Licensing;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Configuration;
@@ -38,7 +40,26 @@ public sealed class App : AvaloniaApp
 
     public override void OnFrameworkInitializationCompleted()
     {
-        _runtime = BuildRuntime();
+        string dataDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Axon");
+
+        // An erase that was cut short (a locked file, the app closed half-way) is finished
+        // before anything opens the data again. If it still cannot finish, say what is left
+        // and open nothing: the keys are gone, so the old vault could not be opened anyway.
+        if (DataWipeService.IsPending(dataDirectory))
+        {
+            var pending = new DataWipeService(dataDirectory, CreateVault(dataDirectory), []);
+            var result = Task.Run(pending.WipeAsync).GetAwaiter().GetResult();
+            if (!result.Complete)
+            {
+                ShowUnfinishedErase(result);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+        }
+
+        _runtime = BuildRuntime(dataDirectory);
         var vm = _runtime.MainWindowViewModel;
 
         switch (ApplicationLifetime)
@@ -47,6 +68,7 @@ public sealed class App : AvaloniaApp
             case IClassicDesktopStyleApplicationLifetime desktop:
                 desktop.MainWindow = new MainWindow { DataContext = vm };
                 desktop.MainWindow.Opened += async (_, _) => await vm.InitializeAsync();
+                vm.Settings.CloseAppRequested += (_, _) => desktop.Shutdown();
                 desktop.Exit += (_, _) => _runtime.Dispose();
                 break;
 
@@ -60,11 +82,46 @@ public sealed class App : AvaloniaApp
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static AppRuntime BuildRuntime()
+    /// <summary>The only window when an earlier erase could not be finished at start-up.</summary>
+    private void ShowUnfinishedErase(DataWipeResult result)
     {
-        string dataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axon");
+        var message = new ScrollViewer
+        {
+            Content = new TextBlock
+            {
+                Text = "Axon has not finished erasing your data, so it will not open. " +
+                       "Starting Axon again retries the erase.\n\n" + result.Describe(),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Avalonia.Thickness(24),
+            },
+        };
+
+        switch (ApplicationLifetime)
+        {
+            case IClassicDesktopStyleApplicationLifetime desktop:
+                desktop.MainWindow = new Window { Title = "Axon", Width = 640, Height = 420, Content = message };
+                break;
+            case ISingleViewApplicationLifetime singleView:
+                singleView.MainView = message;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
+    /// NOTE: switching vaults changes key derivation — a database created under the
+    /// mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
+    /// </summary>
+    private static IHardwareVault CreateVault(string dataDirectory)
+    {
+        var keysDir = Path.Combine(dataDirectory, "keys");
+        return OperatingSystem.IsWindows()
+            ? new WindowsDataProtectionVault(keysDir)
+            : new MockHardwareVault();
+    }
+
+    private static AppRuntime BuildRuntime(string dataDirectory)
+    {
         Directory.CreateDirectory(dataDirectory);
 
         // ── Logging ──────────────────────────────────────────────────────────
@@ -81,14 +138,8 @@ public sealed class App : AvaloniaApp
         var healthReportWriter = NullHealthReportWriter.Instance;
 #endif
 
-        // Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
-        // NOTE: switching vaults changes key derivation — a database created under the
-        // mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
-        var keysDir = Path.Combine(dataDirectory, "keys");
-        Directory.CreateDirectory(keysDir);
-        IHardwareVault vault = OperatingSystem.IsWindows()
-            ? new WindowsDataProtectionVault(keysDir)
-            : new MockHardwareVault();
+        Directory.CreateDirectory(Path.Combine(dataDirectory, "keys"));
+        IHardwareVault vault = CreateVault(dataDirectory);
 
         // Opens and migrates the vault once; every repository call then gets its own
         // short-lived DbContext from the factory.
@@ -165,11 +216,29 @@ public sealed class App : AvaloniaApp
 
         var tagRepository = new TagRepository(db);
 
+        // "Erase all data" in Settings. Before the keys are destroyed, nothing may still be
+        // reading the database, holding the field key or writing the log file.
+        var wipe = new DataWipeService(dataDirectory, vault,
+        [
+            new("Stopping the sync relay", () => relayService.DisposeAsync()),
+            new("Clearing the field-encryption key from memory", () => encryptedRepository.DisposeAsync()),
+            new("Closing the database", () =>
+            {
+                db.Close();
+                return ValueTask.CompletedTask;
+            }),
+            new("Closing the log file", () =>
+            {
+                loggerFactory.Dispose();
+                return ValueTask.CompletedTask;
+            }),
+        ]);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade, tagRepository, biometricRepository);
         var mainWindow = new MainWindowViewModel(
             dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
-            airGapState, importCoordinator, licenseContext);
+            airGapState, importCoordinator, licenseContext, wipe);
 
         // Data-residency proof for the Settings privacy panel.
         mainWindow.Settings.DataFolderPath = dataDirectory;

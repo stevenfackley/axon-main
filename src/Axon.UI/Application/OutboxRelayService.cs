@@ -17,6 +17,7 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
     private bool _started;
+    private bool _disposed;
     private RelaySnapshot _current;
 
     public OutboxRelayService(
@@ -47,7 +48,8 @@ internal sealed class OutboxRelayService : IOutboxRelayService
 
     public async Task StartAsync(CancellationToken ct = default)
     {
-        if (_started) return;
+        // Disposed: the data wipe stopped the relay, possibly before start-up reached here.
+        if (_started || _disposed) return;
         _started = true;
         _loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         await PublishSnapshotAsync(ct);
@@ -65,10 +67,14 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     }
 
     public Task RefreshAsync(CancellationToken ct = default) =>
-        PublishSnapshotAsync(ct);
+        _disposed ? Task.CompletedTask : PublishSnapshotAsync(ct);
 
     public async ValueTask DisposeAsync()
     {
+        // The data wipe stops the relay before the app exits, and the exit disposes it again.
+        if (_disposed) return;
+        _disposed = true;
+
         _airGapState.Changed -= OnAirGapChanged;
 
         if (_loopCts is not null)

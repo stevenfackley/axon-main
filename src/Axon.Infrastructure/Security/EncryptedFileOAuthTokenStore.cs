@@ -22,7 +22,8 @@ namespace Axon.Infrastructure.Security;
 /// </summary>
 public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
 {
-    private const string TokenKeyLabel = "axon.oauth.tokens";
+    /// <summary>Vault label of the key that encrypts the token files.</summary>
+    public const string TokenKeyLabel = "axon.oauth.tokens";
 
     private readonly IHardwareVault _vault;
     private readonly string _tokenDirectory;

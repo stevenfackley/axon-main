@@ -1,4 +1,5 @@
 using Axon.Core.Ports;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SQLitePCL;
 
@@ -24,8 +25,11 @@ namespace Axon.Infrastructure.Persistence;
 /// </summary>
 public sealed class AxonDbContextFactory(IHardwareVault vault) : IDbContextFactory<AxonDbContext>
 {
-    private const string KeyLabel = "axon.db.master";
-    private const string DbFileName = "axon.vault.db";
+    /// <summary>Vault label of the SQLCipher database key.</summary>
+    public const string KeyLabel = "axon.db.master";
+
+    /// <summary>Database file name inside the data directory (SQLite adds -wal/-shm/-journal).</summary>
+    public const string DbFileName = "axon.vault.db";
 
     private DbContextOptions<AxonDbContext>? _options;
 
@@ -71,6 +75,18 @@ public sealed class AxonDbContextFactory(IHardwareVault vault) : IDbContextFacto
     public AxonDbContext CreateDbContext() =>
         new(_options ?? throw new InvalidOperationException(
             "The vault is not open. Call InitialiseAsync before creating a context."));
+
+    /// <summary>
+    /// Closes the vault for good: later <see cref="CreateDbContext"/> calls throw instead of
+    /// reopening (and so recreating) the file, and pooled connections are released so the
+    /// database file can be deleted. A context still in use holds its connection until it
+    /// is disposed; after this call that connection is closed rather than pooled.
+    /// </summary>
+    public void Close()
+    {
+        _options = null;
+        SqliteConnection.ClearAllPools();
+    }
 
     internal static DbContextOptions<AxonDbContext> CreateOptions(string connectionString) =>
         new DbContextOptionsBuilder<AxonDbContext>()

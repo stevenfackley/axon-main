@@ -13,20 +13,16 @@ namespace Axon.UI.ViewModels;
 ///   • Encryption status and key fingerprint (last 8 hex chars of SHA-256(key))
 ///   • Hardware vault type (TPM, Secure Enclave, Mock)
 ///   • Sync log (last N outbox events)
-///   • GDPR "Nuclear Option" — triggers IHardwareVault.DestroyKeyAsync
-///
-/// The Nuclear Option handler is intentionally NOT wired here as a simple
-/// ICommand — it requires a separate confirmation ViewModel with a typed
-/// passphrase challenge. The <c>NuclearOptionRequested</c> event bubbles up
-/// to the shell for that multi-step flow.
+///   • "Erase all data": armed only once the person types <see cref="EraseConfirmationWord"/>;
+///     the shell supplies <see cref="EraseHandler"/>, which runs the DataWipeService.
 /// </summary>
 public sealed class SettingsViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler<bool>? TelemetryEnabledChanged;
 
-    /// <summary>Raised when the user initiates the GDPR key-destruction flow.</summary>
-    public event EventHandler? NuclearOptionRequested;
+    /// <summary>Raised when the person clicks "Close Axon" after a complete erase.</summary>
+    public event EventHandler? CloseAppRequested;
 
     /// <summary>Raised when the user clicks "Connect Whoop" (interactive OAuth).</summary>
     public event EventHandler? WhoopConnectRequested;
@@ -62,7 +58,10 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     private readonly DelegateCommand _connectWhoopCommand;
     private readonly DelegateCommand _syncWhoopCommand;
+    private readonly AsyncCommand _eraseAllDataCommand;
+    private readonly DelegateCommand _closeAppCommand;
     private readonly AirGapState _airGapState;
+    private bool _isImporting;
 
     public SettingsViewModel(AirGapState airGapState)
     {
@@ -71,12 +70,16 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AirGapEnabled)));
         _connectWhoopCommand = new DelegateCommand(
             () => WhoopConnectRequested?.Invoke(this, EventArgs.Empty),
-            () => IsWhoopConfigured && !IsWhoopBusy);
+            () => IsWhoopConfigured && !IsWhoopBusy && !IsDataErased);
         _syncWhoopCommand = new DelegateCommand(
             () => WhoopSyncRequested?.Invoke(this, EventArgs.Empty),
-            () => IsWhoopConfigured && !IsWhoopBusy);
+            () => IsWhoopConfigured && !IsWhoopBusy && !IsDataErased);
         OpenDataFolderCommand = new DelegateCommand(
             () => OpenDataFolderRequested?.Invoke(this, EventArgs.Empty));
+        _eraseAllDataCommand = new AsyncCommand(EraseAllDataAsync, CanEraseAllData);
+        _closeAppCommand = new DelegateCommand(
+            () => CloseAppRequested?.Invoke(this, EventArgs.Empty),
+            () => IsEraseComplete);
     }
 
     // ── Data residency (privacy proof) ────────────────────────────────────────
@@ -116,8 +119,16 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     /// <summary>Invoked by the View after the user picks files in the OS dialog.</summary>
     public async Task RunImportAsync(IReadOnlyList<string> paths)
     {
-        if (ImportHandler is null || paths.Count == 0) return;
-        await ImportHandler(paths).ConfigureAwait(true);
+        if (ImportHandler is null || paths.Count == 0 || IsDataErased) return;
+        _isImporting = true;
+        try
+        {
+            await ImportHandler(paths).ConfigureAwait(true);
+        }
+        finally
+        {
+            _isImporting = false;
+        }
     }
 
     // ── Vault info ────────────────────────────────────────────────────────────
@@ -126,7 +137,11 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     public bool IsHardwareBacked
     {
         get => _isHardwareBacked;
-        set => SetField(ref _isHardwareBacked, value);
+        set
+        {
+            if (!SetField(ref _isHardwareBacked, value)) return;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EraseDescription)));
+        }
     }
 
     private string _licenseTierText = "Free";
@@ -254,10 +269,125 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _syncWhoopCommand.RaiseCanExecuteChanged();
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Erase all data ────────────────────────────────────────────────────────
 
-    public void RequestNuclearOption() =>
-        NuclearOptionRequested?.Invoke(this, EventArgs.Empty);
+    /// <summary>The word the person types to arm "Erase all data".</summary>
+    public const string EraseConfirmationWord = "ERASE";
+
+    /// <summary>
+    /// Set by the shell: stops the app's use of the data and runs the erase. The result says
+    /// what was and was not erased.
+    /// </summary>
+    internal Func<Task<DataWipeResult>>? EraseHandler
+    {
+        get => _eraseHandler;
+        set
+        {
+            _eraseHandler = value;
+            _eraseAllDataCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private Func<Task<DataWipeResult>>? _eraseHandler;
+
+    /// <summary>What the erase does, exactly. Shown on the card.</summary>
+    public string EraseDescription =>
+        "Permanently erases everything Axon stores on this device: your readings, tags and tag notes, " +
+        "the sync outbox, the audit log, the encryption keys, your Whoop sign-in, Axon's logs and its " +
+        "health report. " +
+        (IsHardwareBacked
+            ? "The keys are destroyed first, so a database file that cannot be deleted can no longer be decrypted. "
+            : "") +
+        "This cannot be undone. Data in your Whoop account is not affected. " +
+        "Afterwards Axon has to be closed; it starts empty next time.";
+
+    private string _eraseConfirmationText = "";
+    /// <summary>What the person typed into the confirmation box.</summary>
+    public string EraseConfirmationText
+    {
+        get => _eraseConfirmationText;
+        set
+        {
+            if (!SetField(ref _eraseConfirmationText, value ?? "")) return;
+            _eraseAllDataCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private bool _isDataErased;
+    /// <summary>
+    /// True once an erase has started. From then on the app reads no data: Settings shows
+    /// only the erase card, and the rest of the app stays closed.
+    /// </summary>
+    public bool IsDataErased
+    {
+        get => _isDataErased;
+        private set
+        {
+            if (!SetField(ref _isDataErased, value)) return;
+            RaiseWhoopCommandState();
+        }
+    }
+
+    private bool _isEraseComplete;
+    /// <summary>True when the last erase left nothing behind.</summary>
+    public bool IsEraseComplete
+    {
+        get => _isEraseComplete;
+        private set
+        {
+            if (!SetField(ref _isEraseComplete, value)) return;
+            _closeAppCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _eraseStatusText = "";
+    /// <summary>Progress, then the result: what was erased and what is still there.</summary>
+    public string EraseStatusText
+    {
+        get => _eraseStatusText;
+        private set => SetField(ref _eraseStatusText, value);
+    }
+
+    public ICommand EraseAllDataCommand => _eraseAllDataCommand;
+
+    public ICommand CloseAppCommand => _closeAppCommand;
+
+    private bool CanEraseAllData() =>
+        EraseHandler is not null
+        && !IsEraseComplete
+        && string.Equals(EraseConfirmationText, EraseConfirmationWord, StringComparison.Ordinal);
+
+    private async Task EraseAllDataAsync()
+    {
+        if (EraseHandler is null) return;
+        if (IsWhoopBusy || _isImporting)
+        {
+            EraseStatusText = "A Whoop sync or an import is still running. Nothing was erased. " +
+                              "Wait for it to finish, then erase again.";
+            return;
+        }
+
+        IsDataErased = true;
+        EraseStatusText = "Erasing…";
+        try
+        {
+            var result = await EraseHandler().ConfigureAwait(true);
+            IsEraseComplete = result.Complete;
+            EraseStatusText = result.Complete
+                ? result.Describe() + "\n\nClose Axon to finish. It starts empty next time."
+                : result.Describe();
+        }
+        catch (Exception ex)
+        {
+            // The service reports failures in its result, so this is a bug; never imply success.
+            EraseStatusText = $"The erase stopped unexpectedly ({ex.Message}). Some data may still be " +
+                              "on this device. Erase again.";
+        }
+        finally
+        {
+            _eraseAllDataCommand.RaiseCanExecuteChanged();
+        }
+    }
 
     // ── INotifyPropertyChanged ────────────────────────────────────────────────
 
