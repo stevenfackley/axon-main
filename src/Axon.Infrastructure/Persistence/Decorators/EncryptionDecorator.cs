@@ -29,7 +29,8 @@ public sealed class EncryptionDecorator(
     IBiometricRepository inner,
     IHardwareVault vault) : IBiometricRepository, IAsyncDisposable
 {
-    private const string EncKeyLabel = "axon.field.pii";
+    /// <summary>Vault label of the field-encryption key.</summary>
+    public const string EncKeyLabel = "axon.field.pii";
 
     // Lazily-derived, cached key — zeroed on disposal
     private byte[]? _cachedKey;

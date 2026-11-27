@@ -30,7 +30,7 @@ Dependabot #59 held. SkiaSharp 4 is a major: assembly/native-asset repackaging, 
 
 ## 2026-10-29 — Actual stack: Avalonia desktop + mobile satellites
 
-**Status:** accepted (supersedes 2026-04-17 — Initial stack)
+**Status:** accepted (supersedes 2026-04-17 — Initial stack); its desktop-publish line is superseded by 2026-11-27 — Desktop app ships without Native AOT
 **Context:** The 2026-04-17 entry came from the `repo-template-dotnet10-aot` baseline and describes a Linux container service (`linux-musl-x64`, distroless, ~15MB image). Axon is not that: it is a local-first Avalonia app, and no container or distroless deploy exists.
 **Decision:** .NET 10 (`global.json` SDK 10.0.100) with Avalonia UI. `src/Axon.UI` targets `net10.0` (desktop) plus `net10.0-android`, and `net10.0-ios` when built on macOS. CI (`ci.yml`, reusable `ci-dotnet.yml@v1` on `windows-latest`) validates a Native AOT publish for `win-x64`; Android/iOS are the Satellite builds (`build/`).
 **Consequences:**
@@ -46,3 +46,13 @@ Dependabot #59 held. SkiaSharp 4 is a major: assembly/native-asset repackaging, 
 **Consequences:**
 - The deferral no longer applies; SkiaSharp/Avalonia updates flow through Dependabot normally.
 - `ci` and `architecture` are green on `main` (last runs 2026-09-24); the secret-scan gate no longer blocks merges.
+
+## 2026-11-27 — Desktop app ships without Native AOT
+
+**Status:** accepted (supersedes the Native AOT publish in 2026-10-29 — Actual stack)
+**Context:** The documented release build published `Axon.UI` with `/p:PublishAot=true`. Under Native AOT the two ML.NET models fail at run time (a minimal ML.NET 5.0.1 probe published with AOT failed on its first schema lookup), so the anomaly and forecast cards could never work in the build people run. EF Core also builds its model by reflection.
+**Decision:** Publish the desktop app (`net10.0`, `win-x64`) self-contained with ReadyToRun and without trimming (`build/build-windows.cmd`). `Axon.Core` stays Native AOT-clean, and CI keeps publishing it with AOT. Mobile build settings are unchanged.
+**Consequences:**
+- The models run in the shipped desktop build.
+- The publish folder is about 320 MB (282 files, about 110 MB of it native debug symbols from the SkiaSharp and HarfBuzz packages), and start-up includes the JIT work that ReadyToRun does not cover.
+- No C++ build tools are needed to publish the desktop app.

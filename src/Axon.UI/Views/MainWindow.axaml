@@ -137,7 +137,7 @@
                                     Background="#00B894"
                                     Foreground="#0F0F1A"
                                     FontWeight="SemiBold" />
-                            <TextBlock Text="Everything stays on this machine. You can export or wipe it any time."
+                            <TextBlock Text="Everything stays on this machine. You can erase all of it any time in Settings, under Erase all data."
                                        FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

@@ -4,6 +4,7 @@ using Axon.Core.Domain;
 using Axon.Core.Licensing;
 using Axon.Core.Ports;
 using Axon.Core.Serialization;
+using Axon.Infrastructure.Security;
 using Axon.UI.Application;
 using Axon.UI.Observability;
 using Axon.UI.ViewModels;
@@ -186,7 +187,10 @@ public sealed class AirGapTests
                 new WhoopSyncCoordinator(null!, null!, null!, null!, isConfigured: false),
                 State,
                 new DataImportCoordinator(null!),
-                new LicenseContext(LicenseTier.Free));
+                new LicenseContext(LicenseTier.Free),
+                new DataWipeService(
+                    Path.Combine(Path.GetTempPath(), "axon-airgap-" + Guid.NewGuid().ToString("N"), "Axon"),
+                    new MockHardwareVault(), []));
         }
 
         public ManualTimeProvider Time { get; } = new();

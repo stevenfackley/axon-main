@@ -15,7 +15,7 @@ namespace Axon.Infrastructure.Security;
 /// Callers MUST call <see cref="ZeroKey"/> in a <c>finally</c> block to wipe
 /// the in-memory copy.
 /// </summary>
-public sealed class WindowsDataProtectionVault : IHardwareVault
+public sealed class WindowsDataProtectionVault : IHardwareVault, IVaultKeyInspector
 {
     private readonly string _keyDirectory;
 
@@ -110,11 +110,53 @@ public sealed class WindowsDataProtectionVault : IHardwareVault
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Present is not enough: an erase zeroes the blob before it deletes it, so a delete that
+    /// failed leaves a file that no longer unprotects. A blob that cannot be read at all
+    /// (access denied, locked) is <see cref="VaultKeyState.Unknown"/>, never "gone".
+    /// </remarks>
+    public VaultKeyState GetKeyState(string keyLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyLabel);
+        if (!OperatingSystem.IsWindows())
+            return VaultKeyState.Unknown;
+
+        // Read it rather than ask File.Exists, which answers "no" for a folder it may not enter.
+        byte[] blob;
+        try
+        {
+            blob = File.ReadAllBytes(BlobPath(keyLabel));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return VaultKeyState.Missing;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return VaultKeyState.Unknown;
+        }
+
+        if (blob.Length == 0)
+            return VaultKeyState.Unusable;
+
+        try
+        {
+            var key = UnprotectWindows(blob);
+            CryptographicOperations.ZeroMemory(key);
+            return VaultKeyState.Usable;
+        }
+        catch (CryptographicException)
+        {
+            return VaultKeyState.Unusable;
+        }
+    }
+
     /// <summary>
-    /// Converts a logical key label to a safe file name by replacing
-    /// characters that are invalid in file names with underscores.
+    /// The blob's file name for a logical key label: characters that are invalid in file
+    /// names are replaced with underscores, then <c>.key</c> is appended.
     /// </summary>
-    private string BlobPath(string label)
+    public static string KeyFileName(string label)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var safe = string.Create(label.Length, (label, invalid), static (span, state) =>
@@ -124,8 +166,10 @@ public sealed class WindowsDataProtectionVault : IHardwareVault
                 span[i] = Array.IndexOf(inv, src[i]) >= 0 ? '_' : src[i];
         });
 
-        return Path.Combine(_keyDirectory, $"{safe}.key");
+        return $"{safe}.key";
     }
+
+    private string BlobPath(string label) => Path.Combine(_keyDirectory, KeyFileName(label));
 
     [SupportedOSPlatform("windows")]
     private static byte[] ProtectWindows(byte[] data) =>

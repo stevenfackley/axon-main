@@ -97,5 +97,5 @@ A dedicated workspace for "Bio-Mining," allowing users to find hidden links betw
 
 To protect the proprietary technical moat and ensure instantaneous startup times:
 
-* The application is compiled using **Native AOT (Ahead-of-Time)**.
+* The desktop application ships as a **self-contained build pre-compiled with ReadyToRun**, not Native AOT: the on-device models (ML.NET) and EF Core build their schemas by reflection, which Native AOT removes. `Axon.Core` stays Native AOT-clean, and CI checks it.
 * **Source Generators** are utilized to replace reflection-based logic, ensuring the final binary is both high-performance and difficult to reverse-engineer.

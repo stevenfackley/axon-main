@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Axon.Core.Licensing;
@@ -38,16 +39,44 @@ public sealed class App : AvaloniaApp
 
     public override void OnFrameworkInitializationCompleted()
     {
-        _runtime = BuildRuntime();
+        string dataDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Axon");
+        var vault = CreateVault(dataDirectory);
+
+        // StartupErase decides whether the vault can simply be opened: an erase that did not
+        // finish, or a database key that no longer works, is resolved first (or the person is
+        // asked), so the app never crashes on a key it cannot unprotect.
+        var action = DecideStartup(dataDirectory, vault);
+
+        if (action == StartupEraseAction.OpenNormally)
+            OpenApp(dataDirectory, vault);
+        else
+            ShowStartupErase(action, dataDirectory, vault);
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    private void OpenApp(string dataDirectory, IHardwareVault vault)
+    {
+        _runtime = BuildRuntime(dataDirectory, vault);
         var vm = _runtime.MainWindowViewModel;
 
         switch (ApplicationLifetime)
         {
             // Desktop (Windows / Linux / macOS)
             case IClassicDesktopStyleApplicationLifetime desktop:
+                var gate = desktop.MainWindow;
                 desktop.MainWindow = new MainWindow { DataContext = vm };
                 desktop.MainWindow.Opened += async (_, _) => await vm.InitializeAsync();
+                vm.Settings.CloseAppRequested += (_, _) => desktop.Shutdown();
                 desktop.Exit += (_, _) => _runtime.Dispose();
+                if (gate is not null)
+                {
+                    // Opened from the unfinished-erase screen, which start-up already showed.
+                    desktop.MainWindow.Show();
+                    gate.Close();
+                }
                 break;
 
             // Android (single-activity model via ISingleViewApplicationLifetime)
@@ -56,15 +85,55 @@ public sealed class App : AvaloniaApp
                 _ = vm.InitializeAsync();
                 break;
         }
-
-        base.OnFrameworkInitializationCompleted();
     }
 
-    private static AppRuntime BuildRuntime()
+    private static StartupEraseAction DecideStartup(string dataDirectory, IHardwareVault vault) =>
+        StartupErase.Decide(
+            markerPresent: DataWipeService.IsPending(dataDirectory),
+            databaseKey: vault is IVaultKeyInspector inspector
+                ? inspector.GetKeyState(AxonDbContextFactory.KeyLabel)
+                : VaultKeyState.Usable,
+            hardwareVault: vault.IsHardwareBacked,
+            databasePresent: File.Exists(Path.Combine(dataDirectory, AxonDbContextFactory.DbFileName)));
+
+    /// <summary>The only screen while the vault cannot simply be opened; it opens the app when it can.</summary>
+    private void ShowStartupErase(StartupEraseAction action, string dataDirectory, IHardwareVault vault)
     {
-        string dataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axon");
+        var gate = new StartupEraseViewModel(
+            action, new DataWipeService(dataDirectory, vault, []), vault.IsHardwareBacked,
+            () => DecideStartup(dataDirectory, vault));
+        gate.ContinueRequested += (_, _) => OpenApp(dataDirectory, vault);
+        var view = new StartupEraseView { DataContext = gate };
+
+        switch (ApplicationLifetime)
+        {
+            case IClassicDesktopStyleApplicationLifetime desktop:
+                desktop.MainWindow = new Window { Title = "Axon", Width = 720, Height = 520, Content = view };
+                gate.CloseRequested += (_, _) => desktop.Shutdown();
+                break;
+            case ISingleViewApplicationLifetime singleView:
+                singleView.MainView = view;
+                break;
+        }
+
+        _ = gate.StartAsync();
+    }
+
+    /// <summary>
+    /// Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
+    /// NOTE: switching vaults changes key derivation — a database created under the
+    /// mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
+    /// </summary>
+    private static IHardwareVault CreateVault(string dataDirectory)
+    {
+        var keysDir = Path.Combine(dataDirectory, AxonDataFolder.KeysFolder);
+        return OperatingSystem.IsWindows()
+            ? new WindowsDataProtectionVault(keysDir)
+            : new MockHardwareVault();
+    }
+
+    private static AppRuntime BuildRuntime(string dataDirectory, IHardwareVault vault)
+    {
         Directory.CreateDirectory(dataDirectory);
 
         // ── Logging ──────────────────────────────────────────────────────────
@@ -81,14 +150,7 @@ public sealed class App : AvaloniaApp
         var healthReportWriter = NullHealthReportWriter.Instance;
 #endif
 
-        // Real hardware-backed key vault on Windows (DPAPI/TPM); dev mock elsewhere.
-        // NOTE: switching vaults changes key derivation — a database created under the
-        // mock vault cannot be opened under DPAPI. Delete %LOCALAPPDATA%/Axon to reset.
-        var keysDir = Path.Combine(dataDirectory, "keys");
-        Directory.CreateDirectory(keysDir);
-        IHardwareVault vault = OperatingSystem.IsWindows()
-            ? new WindowsDataProtectionVault(keysDir)
-            : new MockHardwareVault();
+        Directory.CreateDirectory(Path.Combine(dataDirectory, AxonDataFolder.KeysFolder));
 
         // Opens and migrates the vault once; every repository call then gets its own
         // short-lived DbContext from the factory.
@@ -101,12 +163,16 @@ public sealed class App : AvaloniaApp
         IBiometricRepository biometricRepository = new AuditLoggingDecorator(
             encryptedRepository, new DbAuditLogger(db), callerIdentity: Environment.UserName);
         var syncOutboxRepository = new SyncOutboxRepository(db);
+        // Every background or UI operation on the vault is tracked here, so the data erase
+        // can stop them all (or refuse) before it closes anything.
+        var vaultActivity = new VaultActivity();
         var inferenceService = new LocalInferenceService(loggerFactory.CreateLogger<LocalInferenceService>());
         var syncTransport = new LoopbackSyncTransport();
         // Air-gap enforcement: one shared flag. The relay stops draining and outbound HTTP
         // is physically blocked while the toggle is on.
         var airGapState = new AirGapState();
-        var relayService = new OutboxRelayService(syncOutboxRepository, syncTransport, healthReportWriter, airGapState);
+        var relayService = new OutboxRelayService(
+            syncOutboxRepository, syncTransport, healthReportWriter, airGapState, vaultActivity: vaultActivity);
 
         // ── Whoop integration ─────────────────────────────────────────────────
         // Credentials come from the WHOOP_API_CLIENT_ID / WHOOP_API_SECRET env vars,
@@ -117,14 +183,14 @@ public sealed class App : AvaloniaApp
 
         var whoopHttp = new HttpClient(
             new AirGapHttpHandler(airGapState) { InnerHandler = new HttpClientHandler() });
-        var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, "tokens"));
+        var tokenStore = new EncryptedFileOAuthTokenStore(vault, Path.Combine(dataDirectory, AxonDataFolder.TokensFolder));
         var whoopOptions = new WhoopDriverOptions { ClientId = whoopClientId, ClientSecret = whoopSecret };
         var whoopAuthenticator = new WhoopAuthenticator(
             whoopOptions, whoopHttp, tokenStore, loggerFactory.CreateLogger<WhoopAuthenticator>());
         var whoopDriver = new WhoopDriver(
             tokenStore, whoopHttp, whoopOptions, whoopAuthenticator, loggerFactory.CreateLogger<WhoopDriver>());
         var ingestionOrchestrator = new IngestionOrchestrator(
-            biometricRepository, inferenceService, loggerFactory.CreateLogger<IngestionOrchestrator>());
+            biometricRepository, inferenceService, loggerFactory.CreateLogger<IngestionOrchestrator>(), vaultActivity);
         var whoopCoordinator = new WhoopSyncCoordinator(
             whoopAuthenticator, whoopDriver, ingestionOrchestrator, tokenStore,
             isConfigured: !string.IsNullOrWhiteSpace(whoopClientId) && !string.IsNullOrWhiteSpace(whoopSecret));
@@ -132,17 +198,19 @@ public sealed class App : AvaloniaApp
         var dashboardFacade = new DashboardDataFacade(
             biometricRepository,
             inferenceService,
+            vaultActivity,
             new RawChartSeriesStrategy(TimeSpan.FromHours(24), threshold: 1440),
             new StreamedChartSeriesStrategy(TimeSpan.FromDays(30), threshold: 2048),
             new AggregateChartSeriesStrategy(threshold: 2048));
 
         var analysisFacade = new AnalysisLabFacade(
             biometricRepository,
+            vaultActivity,
             new IntradayAnalysisBucketStrategy(TimeSpan.FromDays(7)),
             new DailyAnalysisBucketStrategy(TimeSpan.FromDays(45), 60 * 60 * 6, "6-hour buckets"),
             new DailyAnalysisBucketStrategy(TimeSpan.MaxValue, 60 * 60 * 24, "1-day buckets"));
 
-        var importCoordinator = new DataImportCoordinator(biometricRepository);
+        var importCoordinator = new DataImportCoordinator(biometricRepository, vaultActivity);
 
         // Dev-only demo data: opt in with AXON_SEED_DEMO_DATA=1. Never on by default,
         // since seeded rows go through the real ingest path (and the sync outbox).
@@ -165,11 +233,30 @@ public sealed class App : AvaloniaApp
 
         var tagRepository = new TagRepository(db);
 
+        // "Erase all data" in Settings. It first stops the tracked work (or refuses), then
+        // these steps run before the keys are destroyed: nothing may still be reading the
+        // database, holding the field key or writing the log file.
+        var wipe = new DataWipeService(dataDirectory, vault,
+        [
+            new("Stopping the sync relay", () => relayService.DisposeAsync()),
+            new("Clearing the field-encryption key from memory", () => encryptedRepository.DisposeAsync()),
+            new("Closing the database", () =>
+            {
+                db.Close();
+                return ValueTask.CompletedTask;
+            }),
+            new("Closing the log file", () =>
+            {
+                loggerFactory.Dispose();
+                return ValueTask.CompletedTask;
+            }),
+        ], vaultActivity);
+
         var dashboard = new DashboardViewModel(dashboardFacade);
         var analysisLab = new AnalysisLabViewModel(analysisFacade, tagRepository, biometricRepository);
         var mainWindow = new MainWindowViewModel(
             dashboard, analysisLab, relayService, observabilityRuntime, whoopCoordinator,
-            airGapState, importCoordinator, licenseContext);
+            airGapState, importCoordinator, licenseContext, wipe);
 
         // Data-residency proof for the Settings privacy panel.
         mainWindow.Settings.DataFolderPath = dataDirectory;
@@ -181,7 +268,7 @@ public sealed class App : AvaloniaApp
         mainWindow.Settings.LicenseTierText = licenseTier.ToString();
 
         return new AppRuntime(
-            mainWindow, inferenceService, relayService, loggerFactory, observabilityRuntime,
+            mainWindow, relayService, loggerFactory, observabilityRuntime,
             whoopHttp, encryptedRepository);
     }
 
@@ -226,7 +313,6 @@ public sealed class App : AvaloniaApp
 
 internal sealed class AppRuntime(
     MainWindowViewModel mainWindowViewModel,
-    IDisposable inferenceService,
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
     IDisposable observabilityRuntime,
@@ -240,7 +326,6 @@ internal sealed class AppRuntime(
         relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
         // Zero the cached field-encryption key held by the EncryptionDecorator.
         repository.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        inferenceService.Dispose();
         whoopHttp.Dispose();
         // Flush and close Serilog sinks (writes any buffered log entries).
         loggerFactory.Dispose();

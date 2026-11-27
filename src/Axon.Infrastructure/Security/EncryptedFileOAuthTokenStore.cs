@@ -22,7 +22,11 @@ namespace Axon.Infrastructure.Security;
 /// </summary>
 public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
 {
-    private const string TokenKeyLabel = "axon.oauth.tokens";
+    /// <summary>Vault label of the key that encrypts the token files.</summary>
+    public const string TokenKeyLabel = "axon.oauth.tokens";
+
+    /// <summary>Extension of every token file (<c>{driverId}.token</c>).</summary>
+    public const string TokenFileExtension = ".token";
 
     private readonly IHardwareVault _vault;
     private readonly string _tokenDirectory;
@@ -67,7 +71,7 @@ public sealed class EncryptedFileOAuthTokenStore : IOAuthTokenStore
         // driverId is a controlled identifier; sanitize defensively against path traversal.
         var safe = string.Concat(driverId.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_'));
         if (safe.Length == 0) safe = "default";
-        return Path.Combine(_tokenDirectory, safe + ".token");
+        return Path.Combine(_tokenDirectory, safe + TokenFileExtension);
     }
 
     // ── Serialization (length-prefixed binary, AOT-safe) ──────────────────────

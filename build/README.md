@@ -17,19 +17,18 @@ All build and publish scripts live in this directory. Each script is self-contai
 
 ## Windows Desktop (Power Station)
 
-Builds and publishes the Axon desktop app as a **Native AOT** binary for `win-x64`.
+Builds and publishes the Axon desktop app for `win-x64` as a self-contained folder (it carries its own .NET runtime), pre-compiled with ReadyToRun and not trimmed. Not Native AOT: the on-device models (ML.NET) and EF Core build their schemas by reflection, which a Native AOT build removes.
 
 ```cmd
 build\build-windows.cmd
 ```
 
-Runs: restore → build → test → `dotnet publish /p:PublishAot=true`
+Runs: restore → build → test → `dotnet publish src\Axon.UI\Axon.UI.csproj -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false`
 
 **Output:** `src\Axon.UI\bin\Release\net10.0\win-x64\publish\Axon.UI.exe`
 
 **Prerequisites:**
 - .NET 10 SDK
-- Windows 11 with C++ Build Tools (required for Native AOT linking)
 
 ---
 
@@ -180,7 +179,7 @@ Two GitHub Actions workflows run on every pull request and on every push to `mai
 |---|---|
 | `resolve-solution` | Resolves `Axon.sln` for the downstream jobs |
 | Build & Test | `dotnet build` + `dotnet test` on Windows |
-| Native AOT Publish (win-x64) | Native AOT publish for `win-x64` (validates AOT compatibility) |
+| Native AOT Publish (win-x64) | Native AOT publish of `Axon.Core` for `win-x64`, which keeps the core library AOT-clean. The desktop app is not published with Native AOT (see Windows Desktop above) |
 | Dependency & Telemetry Audit | Scans for known CVEs and banned telemetry packages |
 
 `.github/workflows/architecture.yml` is separate (job `boundary-check`, shown as "Axon.Core boundary", on `ubuntu-latest`):

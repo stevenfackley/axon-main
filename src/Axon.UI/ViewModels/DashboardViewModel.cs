@@ -283,20 +283,74 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             $"Form: {form}  ·  Fitness (CTL) {ctl:F0}  ·  Fatigue (ATL) {atl:F0}  ·  Balance (TSB) {tsb:+0;-0;0}";
     }
 
-    private void UpdateInsightCards()
+    private void UpdateInsightCards(DashboardSnapshot snapshot)
     {
         int baselineDays = Math.Max(1, (int)Math.Round((ViewportEnd - ViewportStart).TotalDays));
 
-        var anomaly = _explanations.ExplainAnomalies(AnomalyMarkers, baselineDays);
+        var anomaly = snapshot.AnomalyModelError is not null
+            ? ModelUnavailable("Anomaly Detection", snapshot.AnomalyModelError)
+            : ExplainAnomalyCard(snapshot, baselineDays);
         AnomalyInsightTitle = anomaly.Title;
         AnomalyInsightDetail = anomaly.Detail;
         AnomalyInsightConfidence = anomaly.Confidence;
 
-        var recovery = _explanations.ExplainForecast(RecoveryForecast, AnomalyMarkers.Count);
+        var recovery = snapshot.ForecastModelError is null
+            ? _explanations.ExplainForecast(snapshot.RecoveryForecast, snapshot.ForecastHistoryDays)
+            : ModelUnavailable("Recovery Outlook", snapshot.ForecastModelError);
         RecoveryInsightTitle = recovery.Title;
         RecoveryInsightDetail = recovery.Detail;
         RecoveryInsightConfidence = recovery.Confidence;
     }
+
+    /// <summary>
+    /// Whether there is enough data is judged on what the model scored over its 28-day
+    /// window, not on the viewport; the card then describes the viewport's flags, one metric
+    /// at a time (the one with the larger flagged share, named), so heart rate and HRV are
+    /// never pooled into one percentage.
+    /// </summary>
+    private InsightExplanation ExplainAnomalyCard(DashboardSnapshot snapshot, int baselineDays)
+    {
+        if (snapshot.ScoredAnomalies.Count == 0)
+        {
+            return new InsightExplanation(
+                Title: "Anomaly Detection — Insufficient Data",
+                Detail: "Fewer than 12 usable heart-rate or HRV readings in the 28 days up to your newest one; " +
+                        "the anomaly model needs at least 12.",
+                Confidence: InsightExplanationService.BuildConfidence(0),
+                SampleSize: 0);
+        }
+
+        var metric = snapshot.AnomalyResults
+            .GroupBy(a => a.BiometricType)
+            .OrderByDescending(g => g.Count(a => a.IsAnomaly) / (double)g.Count())
+            .FirstOrDefault();
+        if (metric is null)
+        {
+            bool older = ViewportEnd < snapshot.ScoredAnomalies.Min(a => a.Timestamp);
+            return new InsightExplanation(
+                Title: "Anomaly Detection",
+                Detail: older
+                    ? "Readings in this view were not scored: the model checks your most recent readings " +
+                      "against the ones before them, within the 28 days up to your newest reading."
+                    : "No heart-rate or HRV readings in this view.",
+                Confidence: "",
+                SampleSize: 0);
+        }
+
+        int scoredForMetric = snapshot.ScoredAnomalies.Count(a => a.BiometricType == metric.Key);
+        var explanation = _explanations.ExplainAnomalies(metric.ToList(), baselineDays, scoredForMetric);
+        return explanation with { Detail = $"{MetricName(metric.Key)}: {explanation.Detail}" };
+    }
+
+    private static string MetricName(BiometricType type) =>
+        Array.Find(MetricOptions, o => o.Type == type)?.Label ?? type.ToString();
+
+    private static InsightExplanation ModelUnavailable(string domain, string reason) =>
+        new(
+            Title: $"{domain} — Unavailable",
+            Detail: $"The model could not run on this data ({reason}). Your vitals and charts are not affected.",
+            Confidence: "",
+            SampleSize: 0);
 
     // ── Loading state ─────────────────────────────────────────────────────────
 
@@ -354,7 +408,7 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             AnomalyMarkers = snapshot.Anomalies;
             AnomalyCount = snapshot.Anomalies.Count;
             RecoveryForecast = snapshot.RecoveryForecast;
-            UpdateInsightCards();
+            UpdateInsightCards(snapshot);
             UpdateTrainingLoad(snapshot.TrainingLoadCtl, snapshot.TrainingLoadAtl, snapshot.TrainingLoadTsb);
             IsEmptyState = ChartPoints.Count == 0 && HeartRate == 0d && HeartRateVariability == 0d
                 && AnomalyMarkers.Count == 0 && RecoveryForecast.Count == 0;

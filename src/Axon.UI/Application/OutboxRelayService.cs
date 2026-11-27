@@ -2,6 +2,7 @@ using System.Text.Json;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 using Axon.Core.Serialization;
+using Axon.Infrastructure.Persistence;
 using Axon.UI.Observability;
 
 namespace Axon.UI.Application;
@@ -12,11 +13,13 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     private readonly ISyncTransport _transport;
     private readonly IHealthReportWriter _healthReportWriter;
     private readonly AirGapState _airGapState;
+    private readonly VaultActivity? _vaultActivity;
     private readonly PeriodicTimer _timer;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
     private bool _started;
+    private bool _disposed;
     private RelaySnapshot _current;
 
     public OutboxRelayService(
@@ -24,12 +27,14 @@ internal sealed class OutboxRelayService : IOutboxRelayService
         ISyncTransport transport,
         IHealthReportWriter healthReportWriter,
         AirGapState airGapState,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        VaultActivity? vaultActivity = null)
     {
         _outboxRepository = outboxRepository;
         _transport = transport;
         _healthReportWriter = healthReportWriter;
         _airGapState = airGapState;
+        _vaultActivity = vaultActivity;
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(15), timeProvider ?? TimeProvider.System);
         _current = new RelaySnapshot(
             State: airGapState.Enabled ? RelayState.AirGapped : RelayState.Idle,
@@ -47,10 +52,11 @@ internal sealed class OutboxRelayService : IOutboxRelayService
 
     public async Task StartAsync(CancellationToken ct = default)
     {
-        if (_started) return;
+        // Disposed: the data wipe stopped the relay, possibly before start-up reached here.
+        if (_started || _disposed) return;
         _started = true;
         _loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await PublishSnapshotAsync(ct);
+        await TrackedAsync(PublishSnapshotAsync, ct);
         _loopTask = Task.Run(() => RunLoopAsync(_loopCts.Token), CancellationToken.None);
     }
 
@@ -65,10 +71,14 @@ internal sealed class OutboxRelayService : IOutboxRelayService
     }
 
     public Task RefreshAsync(CancellationToken ct = default) =>
-        PublishSnapshotAsync(ct);
+        _disposed ? Task.CompletedTask : TrackedAsync(PublishSnapshotAsync, ct);
 
     public async ValueTask DisposeAsync()
     {
+        // The data wipe stops the relay before the app exits, and the exit disposes it again.
+        if (_disposed) return;
+        _disposed = true;
+
         _airGapState.Changed -= OnAirGapChanged;
 
         if (_loopCts is not null)
@@ -98,17 +108,40 @@ internal sealed class OutboxRelayService : IOutboxRelayService
         {
             while (await _timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
-                await PublishSnapshotAsync(ct).ConfigureAwait(false);
-                if (_airGapState.Enabled)
+                await TrackedAsync(async token =>
                 {
-                    continue;
-                }
-
-                await DrainPendingAsync(ct).ConfigureAwait(false);
+                    await PublishSnapshotAsync(token).ConfigureAwait(false);
+                    if (!_airGapState.Enabled)
+                        await DrainPendingAsync(token).ConfigureAwait(false);
+                }, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    /// <summary>
+    /// One round of relay work on the vault, tracked so the data erase can stop it. A round
+    /// the erase cancels ends quietly, and none starts while the data is being erased.
+    /// </summary>
+    private async Task TrackedAsync(Func<CancellationToken, Task> work, CancellationToken ct)
+    {
+        if (_vaultActivity is null)
+        {
+            await work(ct).ConfigureAwait(false);
+            return;
+        }
+
+        using var operation = _vaultActivity.TryBegin("the sync relay", ct);
+        if (operation is null) return;
+        try
+        {
+            await work(operation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Stopped by the data erase.
         }
     }
 

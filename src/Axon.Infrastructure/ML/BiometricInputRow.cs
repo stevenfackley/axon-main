@@ -1,11 +1,10 @@
+using Microsoft.ML.Data;
+
 namespace Axon.Infrastructure.ML;
 
 /// <summary>
 /// Flat input schema for the ML.NET IID Spike Detector pipeline.
-///
-/// AOT Safety: Explicitly typed; no reflection-based column discovery.
-/// The column name "Value" is bound by string literal in the estimator
-/// definition rather than attribute scanning.
+/// The column name "Value" is bound by <c>nameof</c> in the estimator definition.
 /// </summary>
 internal sealed class BiometricInputRow
 {
@@ -24,9 +23,10 @@ internal sealed class SpikeOutputRow
 {
     /// <summary>
     /// Three-element vector: [alert (0|1), raw score, p-value].
-    /// Populated by the IidSpikeEstimator output column "Prediction".
+    /// The IidSpikeEstimator writes it as a vector of doubles.
     /// </summary>
-    public float[]? Prediction { get; set; }
+    [VectorType(3)]
+    public double[]? Prediction { get; set; }
 }
 
 /// <summary>

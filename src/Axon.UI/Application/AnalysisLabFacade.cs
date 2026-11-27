@@ -1,18 +1,23 @@
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Persistence;
 
 namespace Axon.UI.Application;
 
 internal sealed class AnalysisLabFacade : IAnalysisLabFacade
 {
     private readonly IBiometricRepository _repository;
+    private readonly VaultActivity? _activity;
     private readonly IAnalysisBucketStrategy[] _bucketStrategies;
 
+    /// <param name="activity">When set, each load is tracked so the data erase can stop it.</param>
     public AnalysisLabFacade(
         IBiometricRepository repository,
+        VaultActivity? activity,
         params IAnalysisBucketStrategy[] bucketStrategies)
     {
         _repository = repository;
+        _activity = activity;
         _bucketStrategies = bucketStrategies;
     }
 
@@ -27,6 +32,11 @@ internal sealed class AnalysisLabFacade : IAnalysisLabFacade
         {
             throw new InvalidOperationException("Choose two different metrics for comparison.");
         }
+
+        using var operation = _activity?.TryBegin("the Analysis Lab load", ct);
+        if (_activity is not null && operation is null)
+            throw new OperationCanceledException("Axon's data is being erased.");
+        ct = operation?.Token ?? ct;
 
         var spec = ResolveBucketSpec(to - from);
         var primaryTask = _repository.GetAggregatesAsync(primaryMetric, from, to, spec.BucketSizeSeconds, ct).AsTask();

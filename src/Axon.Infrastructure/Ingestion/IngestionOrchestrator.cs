@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Threading.Channels;
 using Axon.Core.Domain;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Persistence;
 using Microsoft.Extensions.Logging;
 
 namespace Axon.Infrastructure.Ingestion;
@@ -26,15 +27,22 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
     private readonly IBiometricRepository _repository;
     private readonly IInferenceService _inference;
     private readonly ILogger<IngestionOrchestrator> _logger;
+    private readonly VaultActivity? _activity;
 
+    /// <summary>
+    /// With an <see cref="VaultActivity"/>, each ingest and each post-ingest pass is tracked,
+    /// so the data erase can cancel them and wait for them to let go of the vault.
+    /// </summary>
     public IngestionOrchestrator(
         IBiometricRepository repository,
         IInferenceService inference,
-        ILogger<IngestionOrchestrator> logger)
+        ILogger<IngestionOrchestrator> logger,
+        VaultActivity? activity = null)
     {
         _repository = repository;
         _inference = inference;
         _logger = logger;
+        _activity = activity;
     }
 
     /// <inheritdoc/>
@@ -42,6 +50,22 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
         IBiometricDriver driver,
         DateTimeOffset since,
         CancellationToken ct = default)
+    {
+        if (_activity is null)
+        {
+            await IngestTrackedAsync(driver, since, ct).ConfigureAwait(false);
+            return;
+        }
+
+        using var operation = _activity.TryBegin($"a {driver.DisplayName} sync", ct)
+            ?? throw new InvalidOperationException("Axon's data is being erased, so nothing was synced.");
+        await IngestTrackedAsync(driver, since, operation.Token).ConfigureAwait(false);
+    }
+
+    private async ValueTask IngestTrackedAsync(
+        IBiometricDriver driver,
+        DateTimeOffset since,
+        CancellationToken ct)
     {
         _logger.LogInformation(
             "[Ingestion] Starting ingest from driver={DriverId} since={Since:O}.",
@@ -185,9 +209,19 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
     /// Fires an inference pass in the background after a successful ingest.
     /// Uses <c>Task.Run</c> so it never blocks the ingestion caller.
     /// Errors are captured and logged — they must not surface to the caller.
+    /// When tracked, the data erase can cancel the pass and wait for it to end.
     /// </summary>
     private void TriggerInferencePass(string driverId, CancellationToken ct)
     {
+        VaultActivity.Operation? operation = null;
+        if (_activity is not null)
+        {
+            operation = _activity.TryBegin("the analysis that runs after a sync", ct);
+            if (operation is null) return;   // the data is being erased
+            ct = operation.Token;
+        }
+
+        // Not started with ct: a pass that never runs would never end its operation.
         _ = Task.Run(async () =>
         {
             try
@@ -243,6 +277,10 @@ public sealed class IngestionOrchestrator : IIngestionOrchestrator
                     "[Inference] Post-ingest inference pass failed for driver={DriverId}.",
                     driverId);
             }
-        }, ct);
+            finally
+            {
+                operation?.Dispose();
+            }
+        }, CancellationToken.None);
     }
 }
