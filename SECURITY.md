@@ -89,7 +89,7 @@ These are **hard requirements** enforced during code review:
 - All `ToString()` and logging methods on domain objects must mask `Value` fields.
 - `IHardwareVault` must be used for all cryptographic key derivation — no `RNGCryptoServiceProvider` or static keys.
 - No package that makes outbound HTTP calls may be added to `Axon.Core`.
-- AOT publish must succeed — no reflection-based security libraries.
+- `Axon.Core`'s Native AOT publish must succeed — no reflection-based security libraries there.
 
 ---
 

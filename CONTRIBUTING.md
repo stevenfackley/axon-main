@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to **Axon — The Sovereign Biometric Vault**. This document outlines everything you need to know to contribute effectively while maintaining the project's strict performance, security, and architectural standards.
 
-> ⚠️ **Core Principle:** Axon is a zero-knowledge, offline-first system. Any contribution that introduces cloud telemetry, third-party analytics, or reflection-heavy code that breaks Native AOT will be rejected regardless of other merits.
+> ⚠️ **Core Principle:** Axon is a zero-knowledge, offline-first system. Any contribution that introduces cloud telemetry, third-party analytics, or reflection-heavy code in `Axon.Core` (which must stay Native AOT-clean) will be rejected regardless of other merits.
 
 ---
 
@@ -80,13 +80,13 @@ dotnet run --project src/Axon.UI
 dotnet test
 ```
 
-### Native AOT Publish (validates AOT compatibility)
+### Desktop publish (Windows x64)
 
 ```bash
-dotnet publish src/Axon.UI -r win-x64 -c Release /p:PublishAot=true
+dotnet publish src/Axon.UI -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false
 ```
 
-Always run this before submitting a PR that touches `Axon.Core` or `Axon.Infrastructure` to ensure your changes are AOT-compatible.
+The desktop app is published self-contained with ReadyToRun, not with Native AOT: ML.NET and EF Core need reflection. CI still publishes `Axon.Core` with Native AOT, to keep the core library AOT-clean.
 
 ---
 
@@ -151,7 +151,7 @@ var events = new List<BiometricEvent>();
 ```
 
 - **No LINQ in hot ingestion loops** — prefer `for` loops and `Span<T>`.
-- **No `dynamic` or reflection** — breaks Native AOT.
+- **No `dynamic` or reflection in `Axon.Core`** — it must stay Native AOT-clean.
 - All data requests spanning **> 24 hours** must use `LttbDownsampler` before reaching the UI.
 - The UI thread must **never be blocked**. All I/O and ML inference runs on background threads.
 
@@ -171,7 +171,7 @@ var events = new List<BiometricEvent>();
 
 - Avoid `Type.GetType()`, `Assembly.Load()`, `Activator.CreateInstance()`, and dynamic code generation.
 - Use `[JsonSerializable]` source generators for all new types added to `AxonJsonContext`.
-- Test AOT publish (`/p:PublishAot=true`) before submitting a PR.
+- Changes to `Axon.Core` must keep its Native AOT publish clean (CI runs it: `dotnet publish src/Axon.Core -r win-x64 -c Release -p:PublishAot=true`).
 
 ---
 
@@ -180,7 +180,7 @@ var events = new List<BiometricEvent>();
 A PR is only ready to merge when **all** of the following are true:
 
 - [ ] Code compiles cleanly with `dotnet build` (zero warnings).
-- [ ] AOT publish succeeds: `dotnet publish -r win-x64 -c Release /p:PublishAot=true`
+- [ ] Desktop publish succeeds: `dotnet publish src/Axon.UI -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false`
 - [ ] All existing tests pass: `dotnet test`
 - [ ] New `NormalizationMapper` implementations have **100% unit test coverage**.
 - [ ] Memory profiling (dotnet-trace / BenchmarkDotNet) shows **zero hot-path heap allocations** for ingestion loops.
@@ -197,7 +197,7 @@ A PR is only ready to merge when **all** of the following are true:
 
 1. Fill out the [PR template](.github/PULL_REQUEST_TEMPLATE.md) completely.
 2. Link the related issue using `Closes #<issue-number>`.
-3. Ensure the CI pipeline passes (build + test + AOT check).
+3. Ensure the CI pipeline passes (build + test + the `Axon.Core` AOT check).
 4. Request review from at least one maintainer.
 5. Address all review comments before requesting re-review.
 6. PRs with failing CI will not be merged.

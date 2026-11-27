@@ -22,7 +22,7 @@
 
 | Layer | Technology | Justification |
 | --- | --- | --- |
-| **Runtime** | .NET 10 (Native AOT) | Extreme performance, sub-second startup, and IP protection via binary obfuscation. |
+| **Runtime** | .NET 10, self-contained with ReadyToRun | Fast start without a separately installed runtime. Not Native AOT: the on-device models (ML.NET) and EF Core need reflection. |
 | **Presentation** | Avalonia UI + SkiaSharp | Cross-platform GPU rendering capable of 120fps telemetry drawing. |
 | **Persistence** | SQLite with SQLCipher | Local-first, industry-standard encrypted relational storage. |
 | **Intelligence** | ML.NET (ONNX) | Local inference for privacy; no biometric data leaves the device for AI processing. |

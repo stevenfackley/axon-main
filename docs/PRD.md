@@ -16,7 +16,7 @@
 
 **Axon** is an elite, offline-first biometric telemetry vault designed to return data sovereignty to the user. It unifies fragmented health data from multiple wearables (Whoop, Garmin, Oura, Apple Health, Google Health) into a single, high-performance ecosystem.
 
-Unlike competitors that rely on cloud-based subscriptions, Axon performs all AI analysis, correlation discovery, and data storage locally. It leverages **.NET 10** and **Native AOT** to provide a secure, "air-gapped" alternative for users who prioritize privacy and professional-grade data mining.
+Unlike competitors that rely on cloud-based subscriptions, Axon performs all AI analysis, correlation discovery, and data storage locally. It leverages **.NET 10**, shipped as a self-contained build (not Native AOT, because its on-device models need reflection), to provide a secure, "air-gapped" alternative for users who prioritize privacy and professional-grade data mining.
 
 ---
 
@@ -61,7 +61,7 @@ Unlike competitors that rely on cloud-based subscriptions, Axon performs all AI 
 
 | Category | Requirement | Specification |
 | --- | --- | --- |
-| **Performance** | Startup Time | < 1.0s to "Data Ready" state via Native AOT. |
+| **Performance** | Startup Time | < 1.0s to "Data Ready" state (target; the self-contained ReadyToRun build has not been measured against it). |
 | **Security** | Encryption | AES-256 (SQLCipher) for all local data. |
 | **Compliance** | HIPAA/GDPR | Immutable audit logs for all data access events. |
 | **Reliability** | Offline Support | 100% functionality without internet (excluding initial API auth). |

@@ -33,7 +33,7 @@
 | **Zero-Knowledge Storage** | AES-256 encrypted SQLite (SQLCipher). Keys derived exclusively from your device's TPM (Windows) or Secure Enclave (iOS/Android). |
 | **Sovereign Sync** | Optional peer-to-peer gRPC sync between your desktop Power Station and mobile Satellite apps — double-encrypted, zero-knowledge. |
 | **HIPAA/GDPR by Design** | Every data access is wrapped in an audit-logging decorator. A "Nuclear Option" key wipe effectively destroys all local data. |
-| **Native AOT** | Compiled Ahead-of-Time for sub-second startup, minimal memory footprint, and binary-level IP protection. |
+| **Self-contained desktop build** | Ships with its own .NET runtime, pre-compiled with ReadyToRun. Not Native AOT: the on-device models (ML.NET) and EF Core build their schemas by reflection, which a Native AOT build removes. `Axon.Core` stays Native AOT-clean. |
 | **Air-Gap Mode** | A single toggle disables all outbound networking while retaining 100% analytical capability offline. |
 
 ---
@@ -129,7 +129,7 @@ axon-main/
 
 | Layer | Technology | Version |
 |---|---|---|
-| Runtime | .NET Native AOT | 10.0 |
+| Runtime | .NET, self-contained with ReadyToRun (not Native AOT) | 10.0 |
 | Language | C# | 14 |
 | UI Framework | Avalonia UI (MVVM) | Latest |
 | GPU Rendering | SkiaSharp | Latest |
@@ -172,11 +172,13 @@ dotnet run --project src/Axon.UI
 dotnet test
 ```
 
-### Publish (Native AOT — Windows x64)
+### Publish (Windows x64)
 
 ```bash
-dotnet publish src/Axon.UI -r win-x64 -c Release /p:PublishAot=true
+dotnet publish src/Axon.UI -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false
 ```
+
+A self-contained folder with ReadyToRun, not trimmed. Not Native AOT: the on-device models (ML.NET) and EF Core build their schemas by reflection, which a Native AOT build removes. `build\build-windows.cmd` runs the same publish after build and test.
 
 ### Publish (Android)
 
@@ -192,7 +194,7 @@ See [build/README.md](build/README.md) for the Android build scripts (`build/bui
 
 | Platform | Status | Notes |
 |---|---|---|
-| Windows 11 | ✅ Primary (Power Station) | Native AOT, TPM key derivation |
+| Windows 11 | ✅ Primary (Power Station) | Self-contained ReadyToRun build, TPM key derivation |
 | Android | 🚧 In Progress (Satellite) | Secure Enclave key derivation |
 | iOS | 🚧 In Progress (Satellite) | Secure Enclave via `Entitlements.plist` |
 | macOS | 🗓 Planned | Avalonia cross-platform |
@@ -292,7 +294,7 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for th
 
 **Quick rules:**
 - All new `IBiometricDriver` implementations require 100% unit test coverage on the `NormalizationMapper`.
-- No reflection-based code that breaks Native AOT.
+- No reflection-based code in `Axon.Core`, which stays Native AOT-clean. (The desktop app ships without Native AOT because ML.NET and EF Core need reflection.)
 - No third-party telemetry, analytics SDKs, or cloud-calling code may be introduced.
 - The hot ingestion path must show **zero heap allocations** in a memory profiling run.
 

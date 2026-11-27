@@ -3,7 +3,7 @@
 Biometric ingestion + analysis platform. Local-first; no cloud.
 
 ## Tech stack
-- **Runtime:** .NET 10, targeting Native AOT
+- **Runtime:** .NET 10. The desktop app ships self-contained with ReadyToRun, not Native AOT (ML.NET and EF Core need reflection); `Axon.Core` stays Native AOT-clean
 - **Language:** C# 14
 - **UI:** Avalonia UI (MVVM)
 - **Graphics:** SkiaSharp (direct GPU rendering)
@@ -41,7 +41,7 @@ Biometric ingestion + analysis platform. Local-first; no cloud.
 - Build: `dotnet build`
 - Run: `dotnet run --project src/Axon.UI`
 - Test: `dotnet test`
-- AOT publish: `dotnet publish -r win-x64 -c Release /p:PublishAot=true`
+- Desktop publish: `dotnet publish src/Axon.UI -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false`
 
 ## Security guardrails
 - **No cloud:** block any attempt to add telemetry (ApplicationInsights/Segment/Datadog/etc).
@@ -49,7 +49,7 @@ Biometric ingestion + analysis platform. Local-first; no cloud.
 - **Encryption:** any new storage service must use the `IHardwareVault` interface for key derivation.
 
 ## Do not
-- Skip Native AOT compatibility — every dependency must be AOT-friendly.
+- Break `Axon.Core`'s Native AOT compatibility (CI publishes it with AOT). The desktop app itself is not AOT: ML.NET and EF Core need reflection.
 - Disable `TreatWarningsAsErrors`.
 - Bypass the `EncryptionDecorator` on biometric data writes.
 - Add `using` directives that aren't used (`IDE0005` is fatal under `TreatWarningsAsErrors`).

@@ -43,7 +43,7 @@ All features must pass this check before consideration:
 
 - [ ] This feature does NOT introduce cloud telemetry, analytics, or third-party tracking.
 - [ ] This feature does NOT require biometric data to leave the device (or if it does, it uses zero-knowledge encryption).
-- [ ] This feature is compatible with Native AOT (no reflection-heavy dependencies).
+- [ ] This feature keeps `Axon.Core` Native AOT-clean (no reflection-heavy dependencies there).
 - [ ] This feature respects the Air-Gap mode (can operate fully offline).
 
 ## Acceptance Criteria

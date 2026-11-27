@@ -37,7 +37,7 @@ Closes #<!-- issue number -->
 
 ## Performance & Memory
 
-- [ ] No `dynamic` types or reflection introduced (breaks Native AOT).
+- [ ] No `dynamic` types or reflection introduced in `Axon.Core` (it stays Native AOT-clean).
 - [ ] Hot-path ingestion loops use `Span<T>` / `ArrayPool<T>` — no per-event heap allocations.
 - [ ] Data requests spanning >24 hours route through `LttbDownsampler`.
 - [ ] UI thread is never blocked (heavy work dispatched via `Task.Run`).
@@ -46,7 +46,7 @@ Closes #<!-- issue number -->
 
 - [ ] `dotnet build` — zero warnings.
 - [ ] `dotnet test` — all tests pass.
-- [ ] AOT publish: `dotnet publish -r win-x64 -c Release /p:PublishAot=true` — succeeds.
+- [ ] Desktop publish: `dotnet publish src/Axon.UI -f net10.0 -p:TargetFrameworks=net10.0 -r win-x64 -c Release --self-contained true -p:PublishReadyToRun=true -p:PublishTrimmed=false` — succeeds.
 - [ ] New `NormalizationMapper` has **100% unit test coverage** (if applicable).
 - [ ] Memory profiling shows zero hot-path heap allocations (if touching ingestion).
 - [ ] `docs/` updated for any new `IBiometricDriver` or architectural change.
