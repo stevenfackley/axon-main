@@ -99,3 +99,6 @@ package-lock.json
 
 # Windows NTFS alternate-data-stream Zone.Identifier files (colon form on Linux)
 *:Zone.Identifier
+# The same files as WSL writes them on a Windows drive: the colon becomes U+F03A, which neither rule above
+# matches. Nine of them were committed under docs/diagrams that way.
+*Zone.Identifier
