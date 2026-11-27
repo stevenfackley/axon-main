@@ -83,6 +83,7 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
             RecoveryScore: GetLatestValue(latestVitals, BiometricType.RecoveryScore),
             ReadinessScore: GetLatestValue(latestVitals, BiometricType.ReadinessScore),
             ChartSeries: chartTask.Result,
+            ScoredAnomalies: scored,
             AnomalyResults: anomalyResults,
             Anomalies: anomalyResults.Where(a => a.IsAnomaly).ToArray(),
             AnomalyModelError: anomalyError,

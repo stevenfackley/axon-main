@@ -133,6 +133,55 @@ public sealed class DashboardDataFacadeTests
         Assert.StartsWith("HRV: 5 out of 20 readings (25%)", vm.AnomalyInsightDetail);
     }
 
+    // ── Daily data (one HR and one HRV reading a day, Whoop's shape) ──────────
+
+    [Fact]
+    public async Task DailyData_DefaultDayView_JudgesSufficiencyOnTheScoredWindow()
+    {
+        var vm = new DashboardViewModel(NewFacade(InMemoryRepository.WithDailyHistory(60), RealModels()));
+
+        await vm.InitializeAsync();   // 24-hour view: one reading of each in view
+
+        Assert.DoesNotContain("Insufficient", vm.AnomalyInsightTitle);
+        Assert.DoesNotContain("Only 1 data point", vm.AnomalyInsightDetail);
+        Assert.Contains("across 1 data point", vm.AnomalyInsightDetail);
+        // 29 readings in the 28-day window, the first 13 are the detector's baseline: 16 scored.
+        Assert.Equal("Low — needs more data (n=16)", vm.AnomalyInsightConfidence);
+    }
+
+    [Fact]
+    public async Task DailyData_WeekView_CountsTheFlagShownOnTheChart()
+    {
+        var vm = new DashboardViewModel(NewFacade(InMemoryRepository.WithDailyHistory(60, spikeDaysAgo: 3), RealModels()));
+        vm.SelectedViewportPreset = vm.AvailableViewportPresets.Single(p => p.Label == "7D");
+
+        await vm.InitializeAsync();
+
+        var flag = Assert.Single(vm.AnomalyMarkers);
+        Assert.Equal(BiometricType.HeartRate, flag.BiometricType);
+        Assert.StartsWith("Heart Rate: 1 out of 7 readings", vm.AnomalyInsightDetail);
+        Assert.DoesNotContain("Insufficient", vm.AnomalyInsightTitle);
+    }
+
+    [Fact]
+    public async Task DailyData_WeekViewFromFiveWeeksAgo_SaysItWasNotScored_NotThatThereIsNoData()
+    {
+        var vm = new DashboardViewModel(NewFacade(InMemoryRepository.WithDailyHistory(60), RealModels()));
+        vm.SelectedViewportPreset = vm.AvailableViewportPresets.Single(p => p.Label == "7D");
+        await vm.InitializeAsync();
+
+        vm.ViewportEnd = DateTimeOffset.UtcNow.AddDays(-35);
+        vm.ViewportStart = vm.ViewportEnd.AddDays(-7);
+        await vm.RefreshAsync();
+
+        Assert.Equal(7, vm.ChartPoints.Count);
+        Assert.StartsWith("Readings in this view were not scored", vm.AnomalyInsightDetail);
+        Assert.DoesNotContain("No data points", vm.AnomalyInsightDetail);
+        Assert.Empty(vm.AnomalyMarkers);
+    }
+
+    private static LocalInferenceService RealModels() => new(NullLogger<LocalInferenceService>.Instance);
+
     /// <summary>Notes the HR window each call was fitted on and flags every sixth hour.</summary>
     private sealed class RecordingInference : IInferenceService
     {
@@ -187,6 +236,19 @@ public sealed class DashboardDataFacadeTests
     private sealed class InMemoryRepository(List<BiometricEvent> events) : IBiometricRepository
     {
         /// <summary>30 days: hourly HR and HRV, one sleep and one strain reading per day.</summary>
+        /// <summary>One HR and one HRV reading a day (an hour before <c>End</c>, minus whole days).</summary>
+        public static InMemoryRepository WithDailyHistory(int days, int? spikeDaysAgo = null)
+        {
+            var events = new List<BiometricEvent>();
+            for (int d = 0; d < days; d++)
+            {
+                var ts = End.AddHours(-1).AddDays(-d);
+                events.Add(Event(BiometricType.HeartRate, ts, d == spikeDaysAgo ? 160 : 58 + (d % 3)));
+                events.Add(Event(BiometricType.HeartRateVariability, ts, 50 + (d % 3)));
+            }
+            return new InMemoryRepository(events);
+        }
+
         public static InMemoryRepository WithHistory()
         {
             var events = new List<BiometricEvent>();

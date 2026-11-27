@@ -39,24 +39,31 @@ public sealed class InsightExplanationService
     ///     Number of calendar days represented by <paramref name="results"/>; used
     ///     for confidence labelling and the baseline description in copy.
     /// </param>
+    /// <param name="scoredSampleSize">
+    ///     When <paramref name="results"/> is a slice (the points a view shows) of what the model
+    ///     scored, the number of points it scored for that metric. The model only scores a metric
+    ///     that had enough readings, so the "needs more data" checks are skipped and this count
+    ///     sets the confidence label; the counts in the text are still the slice's.
+    /// </param>
     /// <returns>
-    ///     A human-readable explanation. When <paramref name="results"/> is empty or
-    ///     below the minimum sample threshold the explanation explicitly states that
-    ///     more data is required.
+    ///     A human-readable explanation. Without <paramref name="scoredSampleSize"/>, when
+    ///     <paramref name="results"/> is empty or below the minimum sample threshold the
+    ///     explanation explicitly states that more data is required.
     /// </returns>
     public InsightExplanation ExplainAnomalies(
         IReadOnlyList<AnomalyResult> results,
-        int baselineDays)
+        int baselineDays,
+        int? scoredSampleSize = null)
     {
         int n = results.Count;
 
-        if (n == 0)
+        if (scoredSampleSize is null && n == 0)
             return InsufficientDataExplanation(
                 "Anomaly Detection",
                 baselineDays,
                 "No data points were available to evaluate.");
 
-        if (n < LowSampleThreshold)
+        if (scoredSampleSize is null && n < LowSampleThreshold)
             return InsufficientDataExplanation(
                 "Anomaly Detection",
                 baselineDays,
@@ -75,7 +82,7 @@ public sealed class InsightExplanationService
             }
         }
 
-        string confidence = BuildConfidence(n);
+        string confidence = BuildConfidence(scoredSampleSize ?? n);
 
         if (anomalyCount == 0)
         {
@@ -83,7 +90,7 @@ public sealed class InsightExplanationService
                 Title: "All Clear",
                 Detail: $"No anomalies detected across {n} data point{(n == 1 ? "" : "s")} in your {baselineDays}-day baseline. Readings are within expected range.",
                 Confidence: confidence,
-                SampleSize: n);
+                SampleSize: scoredSampleSize ?? n);
         }
 
         // Determine severity from worst p-value.
@@ -98,11 +105,11 @@ public sealed class InsightExplanationService
         string detail = severity switch
         {
             "high-severity" =>
-                $"{anomalyCount} out of {n} reading{(anomalyCount == 1 ? "" : "s")} ({pct}%) triggered a high-severity alert against your {baselineDays}-day baseline. This is a statistically significant deviation — consider reviewing recent activity or consulting a professional.",
+                $"{anomalyCount} out of {n} reading{(n == 1 ? "" : "s")} ({pct}%) triggered a high-severity alert against your {baselineDays}-day baseline. This is a statistically significant deviation — consider reviewing recent activity or consulting a professional.",
             "moderate" =>
-                $"{anomalyCount} out of {n} reading{(anomalyCount == 1 ? "" : "s")} ({pct}%) showed a moderate anomaly compared to your {baselineDays}-day baseline. Watch for a pattern over the next few days.",
+                $"{anomalyCount} out of {n} reading{(n == 1 ? "" : "s")} ({pct}%) showed a moderate anomaly compared to your {baselineDays}-day baseline. Watch for a pattern over the next few days.",
             _ =>
-                $"{anomalyCount} out of {n} reading{(anomalyCount == 1 ? "" : "s")} ({pct}%) showed a mild deviation from your {baselineDays}-day baseline. This is likely within normal daily variation."
+                $"{anomalyCount} out of {n} reading{(n == 1 ? "" : "s")} ({pct}%) showed a mild deviation from your {baselineDays}-day baseline. This is likely within normal daily variation."
         };
 
         string title = severity switch
@@ -116,7 +123,7 @@ public sealed class InsightExplanationService
             Title: title,
             Detail: detail,
             Confidence: confidence,
-            SampleSize: n);
+            SampleSize: scoredSampleSize ?? n);
     }
 
     /// <summary>
