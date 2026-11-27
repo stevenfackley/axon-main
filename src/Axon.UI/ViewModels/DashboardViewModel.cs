@@ -287,11 +287,18 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
     {
         int baselineDays = Math.Max(1, (int)Math.Round((ViewportEnd - ViewportStart).TotalDays));
 
-        // The explanation needs every scored point (it counts the flagged share), not only
-        // the flagged markers.
-        var anomaly = snapshot.AnomalyModelError is null
-            ? _explanations.ExplainAnomalies(snapshot.AnomalyResults, baselineDays)
-            : ModelUnavailable("Anomaly Detection", snapshot.AnomalyModelError);
+        // The explanation needs every point that could have been flagged (it counts the
+        // flagged share), one metric at a time: the card describes the metric with the larger
+        // flagged share, named, so heart rate and HRV are never pooled into one percentage.
+        var metric = snapshot.AnomalyResults
+            .GroupBy(a => a.BiometricType)
+            .OrderByDescending(g => g.Count(a => a.IsAnomaly) / (double)g.Count())
+            .FirstOrDefault();
+        var anomaly = snapshot.AnomalyModelError is not null
+            ? ModelUnavailable("Anomaly Detection", snapshot.AnomalyModelError)
+            : _explanations.ExplainAnomalies(metric?.ToList() ?? [], baselineDays);
+        if (metric is not null)
+            anomaly = anomaly with { Detail = $"{MetricName(metric.Key)}: {anomaly.Detail}" };
         AnomalyInsightTitle = anomaly.Title;
         AnomalyInsightDetail = anomaly.Detail;
         AnomalyInsightConfidence = anomaly.Confidence;
@@ -303,6 +310,9 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
         RecoveryInsightDetail = recovery.Detail;
         RecoveryInsightConfidence = recovery.Confidence;
     }
+
+    private static string MetricName(BiometricType type) =>
+        Array.Find(MetricOptions, o => o.Type == type)?.Label ?? type.ToString();
 
     private static InsightExplanation ModelUnavailable(string domain, string reason) =>
         new(

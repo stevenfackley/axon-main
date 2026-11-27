@@ -52,9 +52,12 @@ public sealed class LocalInferenceService : IInferenceService
 
     /// <summary>
     /// SSA window size: 7-day seasonality for recovery patterns.
-    /// Must be ≤ half the training series length.
+    /// ML.NET requires the training series to be longer than twice this.
     /// </summary>
     private const int SsaWindowSize = 7;
+
+    /// <summary>Fewest days of history the forecaster accepts: more than twice the window (15).</summary>
+    private const int MinForecastHistoryDays = (SsaWindowSize * 2) + 1;
 
     /// <summary>
     /// Number of SSA eigentriples (rank of the decomposition).
@@ -118,7 +121,8 @@ public sealed class LocalInferenceService : IInferenceService
     /// <summary>
     /// Fits a fresh IID spike detector on <paramref name="samples"/> and scores every finite
     /// sample in order. NaN and infinite readings are left out: one would poison the
-    /// p-value history for the points after it.
+    /// p-value history for the points after it. Returns only the points the detector could
+    /// flag: the ones before its p-value window fills are its baseline and are dropped.
     /// </summary>
     private List<AnomalyResult> DetectSpikes(
         IReadOnlyList<BiometricEvent> samples,
@@ -147,23 +151,27 @@ public sealed class LocalInferenceService : IInferenceService
 
         // pvalueHistoryLength: sliding window for p-value computation.
         // The estimator detects both tails (spikes AND dips) by default.
+        int historyLength = Math.Min(scored.Count / 2, MaxPValueHistoryLength);
         var detector = mlContext.Transforms.DetectIidSpike(
             outputColumnName: nameof(SpikeOutputRow.Prediction),
             inputColumnName: nameof(BiometricInputRow.Value),
             confidence: AnomalyConfidence * 100.0,   // ML.NET uses 0–100 scale
-            pvalueHistoryLength: Math.Min(scored.Count / 2, MaxPValueHistoryLength));
+            pvalueHistoryLength: historyLength);
 
         // The detector is stateful along the series: transforming the whole window scores
-        // each row against the rows before it, in order. It raises no alert until its
-        // p-value window is full, so the first half of the series is baseline only.
+        // each row against the rows before it, in order. It raises no alert before row
+        // historyLength - 1 (measured on 5.0.1), so those rows are baseline, not results.
         var transformed = detector.Fit(dataView).Transform(dataView);
+        int firstFlaggable = historyLength - 1;
 
-        var results = new List<AnomalyResult>(scored.Count);
+        var results = new List<AnomalyResult>(scored.Count - firstFlaggable);
         int index = 0;
         foreach (var row in mlContext.Data.CreateEnumerable<SpikeOutputRow>(transformed, reuseRowObject: false))
         {
             ct.ThrowIfCancellationRequested();
-            results.Add(MapSpikeResult(scored[index++], metricType, row));
+            if (index >= firstFlaggable)
+                results.Add(MapSpikeResult(scored[index], metricType, row));
+            index++;
         }
 
         return results;
@@ -195,11 +203,11 @@ public sealed class LocalInferenceService : IInferenceService
         // Groups events by calendar day and produces a single float per day.
         var dailyReadiness = BuildDailyReadinessProxy(sleepHistory, strainHistory);
 
-        if (dailyReadiness.Count < SsaWindowSize * 2)
+        if (dailyReadiness.Count < MinForecastHistoryDays)
         {
             _logger.LogWarning(
                 "[Inference] Insufficient history ({Count} days) for SSA forecast; need {Min}.",
-                dailyReadiness.Count, SsaWindowSize * 2);
+                dailyReadiness.Count, MinForecastHistoryDays);
             return Array.Empty<ForecastPoint>();
         }
 

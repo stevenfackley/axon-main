@@ -6,7 +6,7 @@ namespace Axon.Tests;
 
 /// <summary>
 /// Runs both ML.NET models in <see cref="LocalInferenceService"/> on synthetic series long
-/// enough to pass their minimum-sample thresholds (12 HR/HRV samples, 14 days of history),
+/// enough to pass their minimum-sample thresholds (12 HR/HRV samples, 15 days of history),
 /// and checks the answers are sane, not only that nothing throws.
 /// </summary>
 public sealed class LocalInferenceServiceTests
@@ -18,15 +18,17 @@ public sealed class LocalInferenceServiceTests
     // ── Spike detection ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task DetectAnomalies_RealisticWindow_ReturnsOneResultPerSample()
+    public async Task DetectAnomalies_RealisticWindow_ReturnsOneResultPerFlaggableSample()
     {
         var hr = Series(BiometricType.HeartRate, Wobble(60, 48), TimeSpan.FromMinutes(30));
         var hrv = Series(BiometricType.HeartRateVariability, Wobble(55, 48), TimeSpan.FromMinutes(30));
 
         var results = await _service.DetectAnomaliesAsync(hr, hrv);
 
-        Assert.Equal(48, results.Count(r => r.BiometricType == BiometricType.HeartRate));
-        Assert.Equal(48, results.Count(r => r.BiometricType == BiometricType.HeartRateVariability));
+        // 48 samples: a 24-point p-value window, so the first 23 are baseline, not results.
+        Assert.Equal(hr.Skip(23).Select(e => e.Timestamp),
+            results.Where(r => r.BiometricType == BiometricType.HeartRate).Select(r => r.Timestamp));
+        Assert.Equal(25, results.Count(r => r.BiometricType == BiometricType.HeartRateVariability));
         Assert.All(results, r => Assert.InRange(r.PValue, 0d, 1d));
     }
 
@@ -46,19 +48,19 @@ public sealed class LocalInferenceServiceTests
     }
 
     [Fact]
-    public async Task DetectAnomalies_SpikeInTheWarmUpHalf_IsScoredButNotFlagged()
+    public async Task DetectAnomalies_TheBaselineHalf_IsNotReturned()
     {
         // The p-value window is half the series; the detector raises no alert until it has
-        // filled it, so the first half of every window only serves as the baseline.
+        // filled it, so those points are its baseline and are not reported as "normal".
         var values = Wobble(60, 40);
         values[10] = 160;
         var hr = Series(BiometricType.HeartRate, values, TimeSpan.FromMinutes(10));
 
         var results = await _service.DetectAnomaliesAsync(hr, []);
 
-        Assert.Equal(40, results.Count);
+        Assert.Equal(21, results.Count);
+        Assert.Equal(hr[19].Timestamp, results[0].Timestamp);
         Assert.DoesNotContain(results, r => r.IsAnomaly);
-        Assert.True(results[10].PValue < 0.05);
     }
 
     [Fact]
@@ -69,7 +71,7 @@ public sealed class LocalInferenceServiceTests
 
         var results = await _service.DetectAnomaliesAsync(constant, wobble);
 
-        Assert.Equal(80, results.Count);
+        Assert.Equal(2 * 21, results.Count);
         Assert.DoesNotContain(results, r => r.IsAnomaly);
     }
 
@@ -82,7 +84,7 @@ public sealed class LocalInferenceServiceTests
         var results = await _service.DetectAnomaliesAsync(hr, hrv);
 
         Assert.DoesNotContain(results, r => r.BiometricType == BiometricType.HeartRate);
-        Assert.Equal(12, results.Count(r => r.BiometricType == BiometricType.HeartRateVariability));
+        Assert.Equal(7, results.Count(r => r.BiometricType == BiometricType.HeartRateVariability));
     }
 
     [Fact]
@@ -96,8 +98,9 @@ public sealed class LocalInferenceServiceTests
 
         var results = await _service.DetectAnomaliesAsync(hr, []);
 
-        Assert.Equal(38, results.Count);
-        Assert.DoesNotContain(results, r => r.Timestamp == hr[5].Timestamp || r.Timestamp == hr[17].Timestamp);
+        // 38 finite samples: a 19-point p-value window, so 20 results.
+        Assert.Equal(20, results.Count);
+        Assert.DoesNotContain(results, r => double.IsNaN(r.Score) || double.IsInfinity(r.Score));
         Assert.Equal(hr[30].Timestamp, Assert.Single(results, r => r.IsAnomaly).Timestamp);
     }
 
@@ -177,15 +180,29 @@ public sealed class LocalInferenceServiceTests
         Assert.All(forecast, p => Assert.InRange(p.PredictedReadiness, 75f, 77f));
     }
 
-    [Fact]
-    public async Task ForecastRecovery_UnderFourteenDays_ReturnsNothing()
+    [Theory]
+    [InlineData(13)]
+    [InlineData(14)]
+    public async Task ForecastRecovery_FourteenDaysOrFewer_ReturnsNothing(int days)
     {
-        var sleep = Daily(BiometricType.SleepEfficiency, Wobble(80, 13));
-        var strain = Daily(BiometricType.StrainScore, Wobble(30, 13));
+        // SSA needs a training series longer than twice its 7-day window.
+        var sleep = Daily(BiometricType.SleepEfficiency, Wobble(80, days));
+        var strain = Daily(BiometricType.StrainScore, Wobble(30, days));
 
         var forecast = await _service.ForecastRecoveryAsync(sleep, strain, horizonDays: 7);
 
         Assert.Empty(forecast);
+    }
+
+    [Fact]
+    public async Task ForecastRecovery_FifteenDays_IsEnough()
+    {
+        var sleep = Daily(BiometricType.SleepEfficiency, Wobble(80, 15));
+        var strain = Daily(BiometricType.StrainScore, Wobble(30, 15));
+
+        var forecast = await _service.ForecastRecoveryAsync(sleep, strain, horizonDays: 7);
+
+        Assert.Equal(7, forecast.Count);
     }
 
     [Fact]

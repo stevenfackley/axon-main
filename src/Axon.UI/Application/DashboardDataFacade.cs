@@ -7,7 +7,14 @@ namespace Axon.UI.Application;
 internal sealed class DashboardDataFacade : IDashboardDataFacade
 {
     private static readonly TimeSpan ForecastHistoryWindow = TimeSpan.FromDays(60);
-    private static readonly TimeSpan AnomalyWindowCap = TimeSpan.FromDays(14);
+
+    /// <summary>
+    /// The spike detector is fitted on this window, ending at the newest heart-rate or HRV
+    /// reading whatever the viewport shows, so a flag does not appear or vanish as the person
+    /// pans. The detector's baseline is at most the window's first half, so at least its last
+    /// 14 days are always scored.
+    /// </summary>
+    private static readonly TimeSpan AnomalyScoringWindow = TimeSpan.FromDays(28);
 
     private readonly IBiometricRepository _repository;
     private readonly IInferenceService _inferenceService;
@@ -35,15 +42,16 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
         var latestVitalsTask = _repository.GetLatestVitalsAsync(ct).AsTask();
         var chartTask = chartStrategy.LoadAsync(_repository, activeMetric, viewportStart, viewportEnd, ct).AsTask();
 
-        var anomalyStart = viewportEnd - (span <= AnomalyWindowCap ? span : AnomalyWindowCap);
-        var hrTask = _repository.QueryRangeAsync(BiometricType.HeartRate, anomalyStart, viewportEnd, ct).AsTask();
-        var hrvTask = _repository.QueryRangeAsync(BiometricType.HeartRateVariability, anomalyStart, viewportEnd, ct).AsTask();
-
         var forecastStart = viewportEnd - ForecastHistoryWindow;
         var sleepTask = _repository.QueryRangeAsync(BiometricType.SleepEfficiency, forecastStart, viewportEnd, ct).AsTask();
         var strainTask = _repository.QueryRangeAsync(BiometricType.StrainScore, forecastStart, viewportEnd, ct).AsTask();
 
-        await Task.WhenAll(latestVitalsTask, chartTask, hrTask, hrvTask, sleepTask, strainTask);
+        var anomalyEnd = NewestReading(await latestVitalsTask) ?? viewportEnd;
+        var anomalyStart = anomalyEnd - AnomalyScoringWindow;
+        var hrTask = _repository.QueryRangeAsync(BiometricType.HeartRate, anomalyStart, anomalyEnd, ct).AsTask();
+        var hrvTask = _repository.QueryRangeAsync(BiometricType.HeartRateVariability, anomalyStart, anomalyEnd, ct).AsTask();
+
+        await Task.WhenAll(chartTask, hrTask, hrvTask, sleepTask, strainTask);
 
         var anomaliesTask = RunModelAsync(
             () => _inferenceService.DetectAnomaliesAsync(hrTask.Result, hrvTask.Result, ct), ct);
@@ -54,7 +62,9 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
 
         var latestVitals = latestVitalsTask.Result;
         var trainingLoad = ComputeTrainingLoad(strainTask.Result);
-        var (anomalyResults, anomalyError) = anomaliesTask.Result;
+        var (scored, anomalyError) = anomaliesTask.Result;
+        // Flags and counts are limited to what the viewport shows.
+        var anomalyResults = scored.Where(a => a.Timestamp >= viewportStart && a.Timestamp <= viewportEnd).ToArray();
         var (forecast, forecastError) = forecastTask.Result;
         return new DashboardSnapshot(
             HeartRate: GetLatestValue(latestVitals, BiometricType.HeartRate),
@@ -94,6 +104,18 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
         {
             return (Array.Empty<T>(), ex.Message);
         }
+    }
+
+    private static DateTimeOffset? NewestReading(IReadOnlyDictionary<BiometricType, BiometricEvent> latest)
+    {
+        DateTimeOffset? newest = null;
+        foreach (var type in (ReadOnlySpan<BiometricType>)[BiometricType.HeartRate, BiometricType.HeartRateVariability])
+        {
+            if (latest.TryGetValue(type, out var evt) && (newest is null || evt.Timestamp > newest))
+                newest = evt.Timestamp;
+        }
+
+        return newest;
     }
 
     /// <summary>UTC calendar days with at least one finite sleep or strain reading.</summary>

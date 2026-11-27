@@ -56,7 +56,8 @@ public sealed class DashboardDataFacadeTests
 
         Assert.Null(snapshot.AnomalyModelError);
         Assert.Null(snapshot.ForecastModelError);
-        // 14 days of hourly HR and HRV in the (inclusive) anomaly window, each point scored once.
+        // The detector is fitted on the 28 days up to the newest reading; its baseline is the
+        // first half, so all 14 viewport days of hourly HR and HRV (inclusive) are scored.
         Assert.Equal(2 * ((14 * 24) + 1), snapshot.AnomalyResults.Count);
         Assert.Equal(snapshot.AnomalyResults.Where(a => a.IsAnomaly), snapshot.Anomalies);
         Assert.Equal(7, snapshot.RecoveryForecast.Count);
@@ -89,10 +90,71 @@ public sealed class DashboardDataFacadeTests
 
         await vm.InitializeAsync();
 
+        // 24 of the 40 points fall in the default 24-hour viewport; the card names the metric.
         Assert.Single(vm.AnomalyMarkers);
-        Assert.Contains("1 out of 40", vm.AnomalyInsightDetail);
+        Assert.StartsWith("Heart Rate: ", vm.AnomalyInsightDetail);
+        Assert.Contains("1 out of 24", vm.AnomalyInsightDetail);
         // Confidence comes from the 30 days of sleep/strain history, not the anomaly count.
         Assert.Equal("Moderate (n=30)", vm.RecoveryInsightConfidence);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ScoresTheSameWindowWhateverTheViewport_AndShowsOnlyTheViewportsFlags()
+    {
+        var inference = new RecordingInference();
+        var facade = NewFacade(InMemoryRepository.WithHistory(), inference);
+
+        var today = await facade.LoadAsync(BiometricType.HeartRate, End.AddDays(-1), End);
+        var earlier = await facade.LoadAsync(BiometricType.HeartRate, End.AddDays(-3), End.AddDays(-2));
+
+        // Both loads fitted the detector on the same 28 days, ending at the newest reading.
+        Assert.Equal(inference.Windows[0], inference.Windows[1]);
+        Assert.Equal((End.AddDays(-28), End), inference.Windows[0]);
+        Assert.All(today.Anomalies, a => Assert.InRange(a.Timestamp, End.AddDays(-1), End));
+        Assert.All(earlier.Anomalies, a => Assert.InRange(a.Timestamp, End.AddDays(-3), End.AddDays(-2)));
+        Assert.NotEmpty(today.Anomalies);
+        Assert.NotEmpty(earlier.Anomalies);
+    }
+
+    [Fact]
+    public async Task Dashboard_TheCardDescribesOneMetric_NeverPoolingHeartRateAndHrv()
+    {
+        // HR: nothing flagged in 20 points; HRV: 5 of 20 flagged.
+        var results = Enumerable.Range(0, 20)
+            .Select(i => new AnomalyResult(End.AddHours(-i), BiometricType.HeartRate, false, 1, 0.5))
+            .Concat(Enumerable.Range(0, 20)
+                .Select(i => new AnomalyResult(End.AddHours(-i), BiometricType.HeartRateVariability, i < 5, 9, i < 5 ? 0.001 : 0.5)))
+            .ToArray();
+        var inference = new ThrowingInference { AnomalyAnswer = results, ForecastAnswer = [] };
+        var vm = new DashboardViewModel(NewFacade(InMemoryRepository.WithHistory(), inference));
+
+        await vm.InitializeAsync();
+
+        Assert.StartsWith("HRV: 5 out of 20 readings (25%)", vm.AnomalyInsightDetail);
+    }
+
+    /// <summary>Notes the HR window each call was fitted on and flags every sixth hour.</summary>
+    private sealed class RecordingInference : IInferenceService
+    {
+        public List<(DateTimeOffset First, DateTimeOffset Last)> Windows { get; } = [];
+
+        public ValueTask<IReadOnlyList<AnomalyResult>> DetectAnomaliesAsync(
+            IReadOnlyList<BiometricEvent> heartRateSamples,
+            IReadOnlyList<BiometricEvent> hrvSamples,
+            CancellationToken ct = default)
+        {
+            Windows.Add((heartRateSamples[0].Timestamp, heartRateSamples[^1].Timestamp));
+            IReadOnlyList<AnomalyResult> results = heartRateSamples
+                .Select((e, i) => new AnomalyResult(e.Timestamp, BiometricType.HeartRate, i % 6 == 0, 1, 0.5))
+                .ToArray();
+            return ValueTask.FromResult(results);
+        }
+
+        public ValueTask<IReadOnlyList<ForecastPoint>> ForecastRecoveryAsync(
+            IReadOnlyList<BiometricEvent> sleepHistory,
+            IReadOnlyList<BiometricEvent> strainHistory,
+            int horizonDays = 7,
+            CancellationToken ct = default) => ValueTask.FromResult<IReadOnlyList<ForecastPoint>>([]);
     }
 
     private static DashboardDataFacade NewFacade(IBiometricRepository repository, IInferenceService inference) =>
