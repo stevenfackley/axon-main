@@ -181,7 +181,7 @@ public sealed class App : AvaloniaApp
         mainWindow.Settings.LicenseTierText = licenseTier.ToString();
 
         return new AppRuntime(
-            mainWindow, inferenceService, relayService, loggerFactory, observabilityRuntime,
+            mainWindow, relayService, loggerFactory, observabilityRuntime,
             whoopHttp, encryptedRepository);
     }
 
@@ -226,7 +226,6 @@ public sealed class App : AvaloniaApp
 
 internal sealed class AppRuntime(
     MainWindowViewModel mainWindowViewModel,
-    IDisposable inferenceService,
     IAsyncDisposable relayService,
     ILoggerFactory loggerFactory,
     IDisposable observabilityRuntime,
@@ -240,7 +239,6 @@ internal sealed class AppRuntime(
         relayService.DisposeAsync().AsTask().GetAwaiter().GetResult();
         // Zero the cached field-encryption key held by the EncryptionDecorator.
         repository.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        inferenceService.Dispose();
         whoopHttp.Dispose();
         // Flush and close Serilog sinks (writes any buffered log entries).
         loggerFactory.Dispose();

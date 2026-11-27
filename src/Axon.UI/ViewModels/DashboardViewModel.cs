@@ -283,20 +283,33 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             $"Form: {form}  ·  Fitness (CTL) {ctl:F0}  ·  Fatigue (ATL) {atl:F0}  ·  Balance (TSB) {tsb:+0;-0;0}";
     }
 
-    private void UpdateInsightCards()
+    private void UpdateInsightCards(DashboardSnapshot snapshot)
     {
         int baselineDays = Math.Max(1, (int)Math.Round((ViewportEnd - ViewportStart).TotalDays));
 
-        var anomaly = _explanations.ExplainAnomalies(AnomalyMarkers, baselineDays);
+        // The explanation needs every scored point (it counts the flagged share), not only
+        // the flagged markers.
+        var anomaly = snapshot.AnomalyModelError is null
+            ? _explanations.ExplainAnomalies(snapshot.AnomalyResults, baselineDays)
+            : ModelUnavailable("Anomaly Detection", snapshot.AnomalyModelError);
         AnomalyInsightTitle = anomaly.Title;
         AnomalyInsightDetail = anomaly.Detail;
         AnomalyInsightConfidence = anomaly.Confidence;
 
-        var recovery = _explanations.ExplainForecast(RecoveryForecast, AnomalyMarkers.Count);
+        var recovery = snapshot.ForecastModelError is null
+            ? _explanations.ExplainForecast(snapshot.RecoveryForecast, snapshot.ForecastHistoryDays)
+            : ModelUnavailable("Recovery Outlook", snapshot.ForecastModelError);
         RecoveryInsightTitle = recovery.Title;
         RecoveryInsightDetail = recovery.Detail;
         RecoveryInsightConfidence = recovery.Confidence;
     }
+
+    private static InsightExplanation ModelUnavailable(string domain, string reason) =>
+        new(
+            Title: $"{domain} — Unavailable",
+            Detail: $"The model could not run on this data ({reason}). Your vitals and charts are not affected.",
+            Confidence: "",
+            SampleSize: 0);
 
     // ── Loading state ─────────────────────────────────────────────────────────
 
@@ -354,7 +367,7 @@ public sealed class DashboardViewModel : INotifyPropertyChanged
             AnomalyMarkers = snapshot.Anomalies;
             AnomalyCount = snapshot.Anomalies.Count;
             RecoveryForecast = snapshot.RecoveryForecast;
-            UpdateInsightCards();
+            UpdateInsightCards(snapshot);
             UpdateTrainingLoad(snapshot.TrainingLoadCtl, snapshot.TrainingLoadAtl, snapshot.TrainingLoadTsb);
             IsEmptyState = ChartPoints.Count == 0 && HeartRate == 0d && HeartRateVariability == 0d
                 && AnomalyMarkers.Count == 0 && RecoveryForecast.Count == 0;

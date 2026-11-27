@@ -16,9 +16,10 @@ public interface IInferenceService
 {
     /// <summary>
     /// Runs the IID Spike Detection pipeline over a window of Heart Rate and
-    /// HRV samples. Returns one <see cref="AnomalyResult"/> per input point;
-    /// points with <see cref="AnomalyResult.IsAnomaly"/> == true should be
-    /// flagged on the telemetry chart.
+    /// HRV samples. Returns one <see cref="AnomalyResult"/> per finite input point
+    /// (NaN and infinite readings are skipped; a metric with fewer than 12 finite
+    /// samples is not evaluated); points with <see cref="AnomalyResult.IsAnomaly"/>
+    /// == true should be flagged on the telemetry chart.
     /// </summary>
     /// <param name="heartRateSamples">
     ///     Chronologically ordered HR samples (BiometricType.HeartRate, bpm).

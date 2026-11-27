@@ -45,13 +45,17 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
 
         await Task.WhenAll(latestVitalsTask, chartTask, hrTask, hrvTask, sleepTask, strainTask);
 
-        var anomaliesTask = _inferenceService.DetectAnomaliesAsync(hrTask.Result, hrvTask.Result, ct).AsTask();
-        var forecastTask = _inferenceService.ForecastRecoveryAsync(sleepTask.Result, strainTask.Result, 7, ct).AsTask();
+        var anomaliesTask = RunModelAsync(
+            () => _inferenceService.DetectAnomaliesAsync(hrTask.Result, hrvTask.Result, ct), ct);
+        var forecastTask = RunModelAsync(
+            () => _inferenceService.ForecastRecoveryAsync(sleepTask.Result, strainTask.Result, 7, ct), ct);
 
         await Task.WhenAll(anomaliesTask, forecastTask);
 
         var latestVitals = latestVitalsTask.Result;
         var trainingLoad = ComputeTrainingLoad(strainTask.Result);
+        var (anomalyResults, anomalyError) = anomaliesTask.Result;
+        var (forecast, forecastError) = forecastTask.Result;
         return new DashboardSnapshot(
             HeartRate: GetLatestValue(latestVitals, BiometricType.HeartRate),
             HeartRateVariability: GetLatestValue(latestVitals, BiometricType.HeartRateVariability),
@@ -59,12 +63,48 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
             RecoveryScore: GetLatestValue(latestVitals, BiometricType.RecoveryScore),
             ReadinessScore: GetLatestValue(latestVitals, BiometricType.ReadinessScore),
             ChartSeries: chartTask.Result,
-            Anomalies: anomaliesTask.Result.Where(a => a.IsAnomaly).ToArray(),
-            RecoveryForecast: forecastTask.Result,
+            AnomalyResults: anomalyResults,
+            Anomalies: anomalyResults.Where(a => a.IsAnomaly).ToArray(),
+            AnomalyModelError: anomalyError,
+            RecoveryForecast: forecast,
+            ForecastHistoryDays: CountDaysWithData(sleepTask.Result, strainTask.Result),
+            ForecastModelError: forecastError,
             TrainingLoadCtl: trainingLoad.Ctl,
             TrainingLoadAtl: trainingLoad.Atl,
             TrainingLoadTsb: trainingLoad.Tsb);
     }
+
+    /// <summary>
+    /// Runs one model. A failure leaves that model's result empty with the reason, so the
+    /// vitals, chart and the other model still load; cancellation still propagates.
+    /// </summary>
+    private static async Task<(IReadOnlyList<T> Result, string? Error)> RunModelAsync<T>(
+        Func<ValueTask<IReadOnlyList<T>>> run,
+        CancellationToken ct)
+    {
+        try
+        {
+            return (await run(), null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return (Array.Empty<T>(), ex.Message);
+        }
+    }
+
+    /// <summary>UTC calendar days with at least one finite sleep or strain reading.</summary>
+    private static int CountDaysWithData(
+        IReadOnlyList<BiometricEvent> sleep,
+        IReadOnlyList<BiometricEvent> strain) =>
+        sleep.Concat(strain)
+            .Where(e => double.IsFinite(e.Value))
+            .Select(e => DateOnly.FromDateTime(e.Timestamp.UtcDateTime))
+            .Distinct()
+            .Count();
 
     /// <summary>
     /// Derives the latest CTL/ATL/TSB from the strain history: one load value per
