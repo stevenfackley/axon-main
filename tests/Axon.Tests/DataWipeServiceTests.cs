@@ -189,8 +189,9 @@ public sealed class DataWipeServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Wipe_DatabaseKeyThatCannotBeDestroyed_ErasesNothing()
+    public async Task Wipe_DatabaseKeyDestroyThatFailsBeforeTouchingTheKey_ErasesNothing()
     {
+        // The vault throws before it touches the blob, so the key still unprotects.
         var vault = new RecordingVault(InnerVault(), DbPath, Marker, []);
         vault.FailDestroy.Add(AxonDbContextFactory.KeyLabel);
         var stores = await CreateAppStoresAsync(vault);
@@ -347,7 +348,8 @@ public sealed class DataWipeServiceTests : IDisposable
 
         var result = await NewService(vault, []).WipeAsync();
 
-        Assert.Equal(DataWipeOutcome.NothingErased, result.Outcome);
+        Assert.Equal(DataWipeOutcome.NotStarted, result.Outcome);
+        Assert.StartsWith("Nothing was erased: the data folder", result.Describe());
         Assert.Empty(vault.Destroyed);
     }
 
@@ -389,7 +391,115 @@ public sealed class DataWipeServiceTests : IDisposable
         Assert.True(DataWipeService.IsPending(_dataDir));
     }
 
+    // ── A database key that is zeroed but not deleted ─────────────────────────
+
+    [WindowsFact]
+    public async Task Wipe_KeyZeroedButNotDeleted_GoesOn_AndNeverSaysTheDataCanBeOpened()
+    {
+        // The reviewer's case: the blob is zeroed, then its delete fails because something
+        // (another Axon, an antivirus or backup agent) opened it without delete sharing.
+        var keyFile = Path.Combine(_dataDir, AxonDataFolder.KeysFolder,
+            WindowsDataProtectionVault.KeyFileName(AxonDbContextFactory.KeyLabel));
+        var vault = new RecordingVault(InnerVault(), DbPath, Marker, []) { ZeroThenHold = keyFile };
+        var stores = await CreateAppStoresAsync(vault);
+        var service = NewService(vault, stores.ReleaseSteps([]));
+
+        DataWipeResult first;
+        try
+        {
+            first = await service.WipeAsync();
+        }
+        finally
+        {
+            vault.Holder?.Dispose();
+        }
+
+        Assert.Equal(DataWipeOutcome.Partial, first.Outcome);
+        Assert.DoesNotContain("can still be opened", first.Describe());
+        Assert.StartsWith(Path.Combine("keys", WindowsDataProtectionVault.KeyFileName(AxonDbContextFactory.KeyLabel)),
+            Assert.Single(first.NotErased));
+        Assert.False(File.Exists(DbPath));   // the data was already unreadable, so it went
+        Assert.True(DataWipeService.IsPending(_dataDir));
+        Assert.Equal(VaultKeyState.Unusable, ((IVaultKeyInspector)InnerVault()).GetKeyState(AxonDbContextFactory.KeyLabel));
+        Assert.Equal(StartupEraseAction.FinishErase, StartupErase.Decide(true, VaultKeyState.Unusable, true, false));
+
+        var second = await service.WipeAsync();
+
+        Assert.True(second.Complete, second.Describe());
+        Assert.False(Directory.Exists(_dataDir));
+    }
+
+    [Fact]
+    public async Task Wipe_VaultThatZeroesThenThrows_GoesOn_AndDeletesTheLeftoverKey()
+    {
+        var keys = Path.Combine(_dataDir, AxonDataFolder.KeysFolder);
+        Write(Path.Combine(keys, WindowsDataProtectionVault.KeyFileName(AxonDbContextFactory.KeyLabel)), "zeroed");
+        Write(DbPath, "db");
+        var vault = new ZeroThenThrowVault(VaultKeyState.Unusable);
+
+        var result = await NewService(vault, []).WipeAsync();
+
+        Assert.True(result.Complete, result.Describe());
+        Assert.False(File.Exists(DbPath));
+        Assert.False(Directory.Exists(_dataDir));
+    }
+
+    [Fact]
+    public async Task Wipe_DatabaseKeyWhoseStateCannotBeRead_DeletesNothing_AndKeepsTheMarker()
+    {
+        Write(DbPath, "db");
+        var vault = new ZeroThenThrowVault(VaultKeyState.Unknown);
+
+        var result = await NewService(vault, []).WipeAsync();
+
+        Assert.Equal(DataWipeOutcome.Partial, result.Outcome);
+        Assert.Contains("cannot be checked", Assert.Single(result.NotErased));
+        Assert.DoesNotContain("can still be opened", result.Describe());
+        Assert.True(File.Exists(DbPath));
+        Assert.True(DataWipeService.IsPending(_dataDir));
+    }
+
     // ── The folder guard ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void LinkTargetGuard_AllowsARelocatedFolderOneLevelBelowARoot_RefusesRoots()
+    {
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        // A relocated data folder, say a junction to D:\AxonData: only Axon's names are deleted there.
+        Assert.Equal(Path.Combine(root, "AxonData"), DataWipeService.EnsureSafeLinkTarget(Path.Combine(root, "AxonData")));
+        Assert.Throws<ArgumentException>(() => DataWipeService.EnsureSafeLinkTarget(root));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Throws<ArgumentException>(() => DataWipeService.EnsureSafeLinkTarget(@"\\server\share"));
+            Assert.Equal(@"\\server\share\AxonData", DataWipeService.EnsureSafeLinkTarget(@"\\server\share\AxonData"));
+        }
+
+        Assert.Throws<ArgumentException>(() => DataWipeService.EnsureSafeLinkTarget(Path.GetTempPath()));
+        // The configured (unresolved) path keeps the stricter rule.
+        Assert.Throws<ArgumentException>(() => new DataWipeService(Path.Combine(root, "AxonData"), new MockHardwareVault(), []));
+    }
+
+    [DirectoryLinkFact]
+    public async Task Wipe_RefusedBeforeItStarts_StopsNothing()
+    {
+        Directory.Delete(_dataDir);
+        Assert.True(TestLinks.TryCreateDirectoryLink(_dataDir, Path.GetTempPath()));
+        _links.Add(_dataDir);
+        var activity = new VaultActivity();
+        using var load = activity.TryBegin("the dashboard load")!;
+        var released = false;
+
+        var result = await new DataWipeService(_dataDir, new MockHardwareVault(),
+            [new("Closing the database", () => { released = true; return ValueTask.CompletedTask; })],
+            activity).WipeAsync();
+
+        Assert.Equal(DataWipeOutcome.NotStarted, result.Outcome);
+        Assert.False(load.Token.IsCancellationRequested);
+        Assert.False(released);
+        using var next = activity.TryBegin("a CSV import");
+        Assert.NotNull(next);
+    }
+
 
     [Fact]
     public void Constructor_RefusesAFolderThatIsNotPlainlyTheAppsOwn()
@@ -493,12 +603,40 @@ public sealed class DataWipeServiceTests : IDisposable
         ];
     }
 
-    /// <summary>Wraps the real vault; notes each key destruction and what was on disk at that moment.</summary>
-    private sealed class RecordingVault(IHardwareVault inner, string dbPath, string marker, List<string> journal) : IHardwareVault
+    /// <summary>A vault whose destroy of the database key "zeroes" it and then fails, reporting the given state.</summary>
+    private sealed class ZeroThenThrowVault(VaultKeyState stateAfterFailure) : IHardwareVault, IVaultKeyInspector
     {
+        public bool IsHardwareBacked => true;
+
+        public ValueTask<Memory<byte>> DeriveKeyAsync(string keyLabel, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public void ZeroKey(Memory<byte> keyMaterial) => keyMaterial.Span.Clear();
+
+        public ValueTask DestroyKeyAsync(string keyLabel, CancellationToken ct = default) =>
+            keyLabel == AxonDbContextFactory.KeyLabel
+                ? throw new IOException("The process cannot access the file because it is being used by another process.")
+                : ValueTask.CompletedTask;
+
+        public VaultKeyState GetKeyState(string keyLabel) =>
+            keyLabel == AxonDbContextFactory.KeyLabel ? stateAfterFailure : VaultKeyState.Missing;
+    }
+
+    /// <summary>Wraps the real vault; notes each key destruction and what was on disk at that moment.</summary>
+    private sealed class RecordingVault(IHardwareVault inner, string dbPath, string marker, List<string> journal)
+        : IHardwareVault, IVaultKeyInspector
+    {
+        public VaultKeyState GetKeyState(string keyLabel) =>
+            inner is IVaultKeyInspector inspector ? inspector.GetKeyState(keyLabel) : VaultKeyState.Usable;
+
         public HashSet<string> FailDestroy { get; } = [];
 
         public List<string> Destroyed { get; } = [];
+
+        /// <summary>The database key's blob: on the first destroy, zero it, then hold it open without delete sharing and throw.</summary>
+        public string? ZeroThenHold { get; init; }
+
+        public FileStream? Holder { get; private set; }
 
         public bool IsHardwareBacked => inner.IsHardwareBacked;
 
@@ -512,6 +650,12 @@ public sealed class DataWipeServiceTests : IDisposable
             journal.Add($"destroy {keyLabel} (database file: {File.Exists(dbPath)}, marker: {File.Exists(marker)})");
             if (FailDestroy.Contains(keyLabel))
                 throw new CryptographicException("the key store is unavailable");
+            if (ZeroThenHold is not null && Holder is null && keyLabel == AxonDbContextFactory.KeyLabel)
+            {
+                File.WriteAllBytes(ZeroThenHold, new byte[new FileInfo(ZeroThenHold).Length]);
+                Holder = new FileStream(ZeroThenHold, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                throw new IOException("The process cannot access the file because it is being used by another process.");
+            }
             await inner.DestroyKeyAsync(keyLabel, ct);
             Destroyed.Add(keyLabel);
         }

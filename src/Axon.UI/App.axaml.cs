@@ -44,12 +44,10 @@ public sealed class App : AvaloniaApp
             "Axon");
         var vault = CreateVault(dataDirectory);
 
-        // An erase that did not finish leaves its marker. StartupErase decides: open as usual,
-        // finish it (only once the database key is already gone), or ask the person first.
-        var action = StartupErase.Decide(
-            markerPresent: DataWipeService.IsPending(dataDirectory),
-            databaseKeyPresent: vault is not WindowsDataProtectionVault dpapi || dpapi.KeyExists(AxonDbContextFactory.KeyLabel),
-            hardwareVault: vault.IsHardwareBacked);
+        // StartupErase decides whether the vault can simply be opened: an erase that did not
+        // finish, or a database key that no longer works, is resolved first (or the person is
+        // asked), so the app never crashes on a key it cannot unprotect.
+        var action = DecideStartup(dataDirectory, vault);
 
         if (action == StartupEraseAction.OpenNormally)
             OpenApp(dataDirectory, vault);
@@ -89,11 +87,21 @@ public sealed class App : AvaloniaApp
         }
     }
 
-    /// <summary>The only screen while an earlier erase is unfinished; it opens the app when it can.</summary>
+    private static StartupEraseAction DecideStartup(string dataDirectory, IHardwareVault vault) =>
+        StartupErase.Decide(
+            markerPresent: DataWipeService.IsPending(dataDirectory),
+            databaseKey: vault is IVaultKeyInspector inspector
+                ? inspector.GetKeyState(AxonDbContextFactory.KeyLabel)
+                : VaultKeyState.Usable,
+            hardwareVault: vault.IsHardwareBacked,
+            databasePresent: File.Exists(Path.Combine(dataDirectory, AxonDbContextFactory.DbFileName)));
+
+    /// <summary>The only screen while the vault cannot simply be opened; it opens the app when it can.</summary>
     private void ShowStartupErase(StartupEraseAction action, string dataDirectory, IHardwareVault vault)
     {
         var gate = new StartupEraseViewModel(
-            action, new DataWipeService(dataDirectory, vault, []), vault.IsHardwareBacked);
+            action, new DataWipeService(dataDirectory, vault, []), vault.IsHardwareBacked,
+            () => DecideStartup(dataDirectory, vault));
         gate.ContinueRequested += (_, _) => OpenApp(dataDirectory, vault);
         var view = new StartupEraseView { DataContext = gate };
 
@@ -101,6 +109,7 @@ public sealed class App : AvaloniaApp
         {
             case IClassicDesktopStyleApplicationLifetime desktop:
                 desktop.MainWindow = new Window { Title = "Axon", Width = 720, Height = 520, Content = view };
+                gate.CloseRequested += (_, _) => desktop.Shutdown();
                 break;
             case ISingleViewApplicationLifetime singleView:
                 singleView.MainView = view;

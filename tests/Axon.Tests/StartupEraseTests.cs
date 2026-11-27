@@ -37,17 +37,46 @@ public sealed class StartupEraseTests : IDisposable
 
     private string Marker => Path.Combine(_dataDir, AxonDataFolder.ErasePendingMarker);
 
+    // Every cell: marker x database key state x hardware vault x database file present.
+    // Unknown never becomes "gone"; a key that no longer works is treated like a missing one,
+    // except that with no marker and no database a missing key is simply a first run.
     [Theory]
-    [InlineData(false, false, false, "OpenNormally")]
-    [InlineData(false, false, true, "OpenNormally")]
-    [InlineData(false, true, false, "OpenNormally")]
-    [InlineData(false, true, true, "OpenNormally")]
-    [InlineData(true, true, true, "AskAgain")]       // key still here: the data is intact
-    [InlineData(true, false, true, "FinishErase")]   // key gone: the database is unreadable anyway
-    [InlineData(true, true, false, "AskAgain")]      // development vault: never silently
-    [InlineData(true, false, false, "AskAgain")]
-    public void Decide_EveryCell(bool marker, bool databaseKey, bool hardwareVault, string expected) =>
-        Assert.Equal(Enum.Parse<StartupEraseAction>(expected), StartupErase.Decide(marker, databaseKey, hardwareVault));
+    [InlineData(false, "Missing", false, false, "OpenNormally")]
+    [InlineData(false, "Missing", false, true, "OpenNormally")]
+    [InlineData(false, "Missing", true, false, "OpenNormally")]
+    [InlineData(false, "Missing", true, true, "KeyUnusable")]
+    [InlineData(false, "Usable", false, false, "OpenNormally")]
+    [InlineData(false, "Usable", false, true, "OpenNormally")]
+    [InlineData(false, "Usable", true, false, "OpenNormally")]
+    [InlineData(false, "Usable", true, true, "OpenNormally")]
+    [InlineData(false, "Unusable", false, false, "OpenNormally")]
+    [InlineData(false, "Unusable", false, true, "OpenNormally")]
+    [InlineData(false, "Unusable", true, false, "KeyUnusable")]
+    [InlineData(false, "Unusable", true, true, "KeyUnusable")]
+    [InlineData(false, "Unknown", false, false, "KeyUnreadable")]
+    [InlineData(false, "Unknown", false, true, "KeyUnreadable")]
+    [InlineData(false, "Unknown", true, false, "KeyUnreadable")]
+    [InlineData(false, "Unknown", true, true, "KeyUnreadable")]
+    [InlineData(true, "Missing", false, false, "AskAgain")]
+    [InlineData(true, "Missing", false, true, "AskAgain")]
+    [InlineData(true, "Missing", true, false, "FinishErase")]
+    [InlineData(true, "Missing", true, true, "FinishErase")]
+    [InlineData(true, "Usable", false, false, "AskAgain")]
+    [InlineData(true, "Usable", false, true, "AskAgain")]
+    [InlineData(true, "Usable", true, false, "AskAgain")]
+    [InlineData(true, "Usable", true, true, "AskAgain")]
+    [InlineData(true, "Unusable", false, false, "AskAgain")]
+    [InlineData(true, "Unusable", false, true, "AskAgain")]
+    [InlineData(true, "Unusable", true, false, "FinishErase")]
+    [InlineData(true, "Unusable", true, true, "FinishErase")]
+    [InlineData(true, "Unknown", false, false, "KeyUnreadable")]
+    [InlineData(true, "Unknown", false, true, "KeyUnreadable")]
+    [InlineData(true, "Unknown", true, false, "KeyUnreadable")]
+    [InlineData(true, "Unknown", true, true, "KeyUnreadable")]
+    public void Decide_EveryCell(bool marker, string databaseKey, bool hardwareVault, bool database, string expected) =>
+        Assert.Equal(
+            Enum.Parse<StartupEraseAction>(expected),
+            StartupErase.Decide(marker, Enum.Parse<VaultKeyState>(databaseKey), hardwareVault, database));
 
     [Fact]
     public async Task AskAgain_CancelTheErase_RemovesOnlyTheMarker_AndOpensTheApp()
@@ -61,7 +90,7 @@ public sealed class StartupEraseTests : IDisposable
         await gate.StartAsync();
         Assert.True(gate.IsAsking);
         Assert.Contains(_dataDir, gate.Message);
-        Assert.Contains("did not get as far as your data", gate.Message);
+        Assert.Contains("your data has not been erased", gate.Message);
         gate.CancelEraseCommand.Execute(null);
 
         Assert.True(opened);
@@ -135,10 +164,139 @@ public sealed class StartupEraseTests : IDisposable
         Assert.False(File.Exists(DbPath));
     }
 
-    private StartupEraseViewModel NewGate(StartupEraseAction action, bool hardwareVault) =>
+    [Fact]
+    public async Task KeyUnusable_OffersAFreshStartOrClose_NeverToOpenTheOldData()
+    {
+        File.WriteAllText(DbPath, "unreadable");
+        var gate = NewGate(StartupEraseAction.KeyUnusable, hardwareVault: true);
+        var closed = false;
+        gate.CloseRequested += (_, _) => closed = true;
+
+        Assert.Contains("cannot be read, so the data stored here cannot be opened", gate.Message);
+        Assert.True(gate.IsAsking);
+        Assert.False(gate.CanCancelErase);
+        Assert.True(gate.CanClose);
+        gate.CloseCommand.Execute(null);
+        Assert.True(closed);
+
+        gate.ConfirmationText = "ERASE";
+        await RunCommandAsync(gate, gate.EraseNowCommand);
+
+        Assert.True(gate.CanContinue);
+        Assert.StartsWith("What was left has been erased.", gate.Message);
+        Assert.False(File.Exists(DbPath));
+    }
+
+    [Fact]
+    public void KeyUnreadable_ErasesNothing_AndTryAgainLooksAgain()
+    {
+        File.WriteAllText(DbPath, "the person's data");
+        var next = StartupEraseAction.KeyUnreadable;
+        var gate = NewGate(StartupEraseAction.KeyUnreadable, hardwareVault: true, () => next);
+        var opened = false;
+        gate.ContinueRequested += (_, _) => opened = true;
+
+        Assert.Contains("Nothing has been erased", gate.Message);
+        Assert.False(gate.IsAsking);
+        Assert.True(gate.CanRecheck);
+        Assert.True(gate.CanClose);
+
+        gate.RecheckCommand.Execute(null);   // still unreadable
+        Assert.False(opened);
+        Assert.True(gate.CanRecheck);
+
+        next = StartupEraseAction.OpenNormally;   // whatever held it let go
+        gate.RecheckCommand.Execute(null);
+        Assert.True(opened);
+        Assert.True(File.Exists(DbPath));
+    }
+
+    // ── The key state start-up decides on (real DPAPI blobs) ─────────────────
+
+    [WindowsFact]
+    public async Task KeyState_ReadsTheBlob_NotJustItsName()
+    {
+        var keys = Path.Combine(_dataDir, AxonDataFolder.KeysFolder);
+        Directory.CreateDirectory(keys);
+        var vault = new WindowsDataProtectionVault(keys);
+        var label = AxonDbContextFactory.KeyLabel;
+        var blob = Path.Combine(keys, WindowsDataProtectionVault.KeyFileName(label));
+
+        Assert.Equal(VaultKeyState.Missing, vault.GetKeyState(label));
+
+        vault.ZeroKey(await vault.DeriveKeyAsync(label));
+        Assert.Equal(VaultKeyState.Usable, vault.GetKeyState(label));
+
+        using (new FileStream(blob, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Equal(VaultKeyState.Unknown, vault.GetKeyState(label));   // locked: not "gone"
+
+        File.WriteAllBytes(blob, new byte[new FileInfo(blob).Length]);   // zeroed, as a failed destroy leaves it
+        Assert.Equal(VaultKeyState.Unusable, vault.GetKeyState(label));
+
+        File.WriteAllBytes(blob, []);
+        Assert.Equal(VaultKeyState.Unusable, vault.GetKeyState(label));
+    }
+
+    [WindowsFact]
+    public async Task KeyState_UnreadableKeysFolder_IsUnknown_NeverGone()
+    {
+        var keys = Path.Combine(_dataDir, AxonDataFolder.KeysFolder);
+        Directory.CreateDirectory(keys);
+        var vault = new WindowsDataProtectionVault(keys);
+        vault.ZeroKey(await vault.DeriveKeyAsync(AxonDbContextFactory.KeyLabel));
+        var user = Environment.UserName;
+        Assert.True(Icacls(keys, "/deny", $"{user}:(OI)(CI)(R)"));
+        try
+        {
+            Assert.Equal(VaultKeyState.Unknown, vault.GetKeyState(AxonDbContextFactory.KeyLabel));
+            Assert.Equal(StartupEraseAction.KeyUnreadable,
+                StartupErase.Decide(markerPresent: true, vault.GetKeyState(AxonDbContextFactory.KeyLabel), true, true));
+        }
+        finally
+        {
+            Icacls(keys, "/remove:d", user);
+        }
+    }
+
+    [WindowsFact]
+    public async Task HandZeroedDatabaseKey_FinishesWithAMarker_AndOffersAFreshStartWithout()
+    {
+        var keys = Path.Combine(_dataDir, AxonDataFolder.KeysFolder);
+        Directory.CreateDirectory(keys);
+        var vault = new WindowsDataProtectionVault(keys);
+        vault.ZeroKey(await vault.DeriveKeyAsync(AxonDbContextFactory.KeyLabel));
+        var blob = Path.Combine(keys, WindowsDataProtectionVault.KeyFileName(AxonDbContextFactory.KeyLabel));
+        File.WriteAllBytes(blob, new byte[new FileInfo(blob).Length]);
+        File.WriteAllText(DbPath, "db");
+        var state = vault.GetKeyState(AxonDbContextFactory.KeyLabel);
+
+        Assert.Equal(StartupEraseAction.FinishErase, StartupErase.Decide(true, state, true, true));
+        Assert.Equal(StartupEraseAction.KeyUnusable, StartupErase.Decide(false, state, true, true));
+    }
+
+    private static bool Icacls(string path, params string[] arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("icacls.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        start.ArgumentList.Add(path);
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(start)!;
+        process.WaitForExit(10_000);
+        return process.HasExited && process.ExitCode == 0;
+    }
+
+    private StartupEraseViewModel NewGate(
+        StartupEraseAction action, bool hardwareVault, Func<StartupEraseAction>? recheck = null) =>
         new(action,
             new DataWipeService(_dataDir, new MockHardwareVault(), [], retryDelay: TimeSpan.FromMilliseconds(10)),
-            hardwareVault);
+            hardwareVault,
+            recheck ?? (() => action));
 
     /// <summary>Runs an async command and waits until the screen has moved on from "Erasing…".</summary>
     private static async Task RunCommandAsync(StartupEraseViewModel gate, ICommand command)

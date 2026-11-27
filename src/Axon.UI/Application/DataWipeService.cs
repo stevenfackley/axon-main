@@ -1,6 +1,7 @@
 using System.Text;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Persistence;
+using Axon.Infrastructure.Security;
 
 namespace Axon.UI.Application;
 
@@ -21,7 +22,12 @@ internal enum DataWipeOutcome
     /// <summary>Work on the data was still running, so nothing was touched; the app carries on.</summary>
     Refused,
 
-    /// <summary>The database key could not be destroyed, so nothing was deleted; the data is intact.</summary>
+    /// <summary>The erase could not start (the data folder failed its check); nothing was stopped
+    /// or touched, and the app carries on.</summary>
+    NotStarted,
+
+    /// <summary>The database key could not be destroyed and still unprotects, so nothing was
+    /// deleted; the data can still be opened.</summary>
     NothingErased,
 }
 
@@ -51,6 +57,10 @@ internal sealed record DataWipeResult(
                 text.Append("Nothing was erased, because this was still using your data: ")
                     .Append(string.Join(", ", NotErased))
                     .Append(". Wait for it to finish, then erase again.");
+                return text.ToString();
+
+            case DataWipeOutcome.NotStarted:
+                text.Append("Nothing was erased: ").Append(string.Join("; ", NotErased)).Append('.');
                 return text.ToString();
 
             case DataWipeOutcome.NothingErased:
@@ -103,8 +113,11 @@ internal sealed record DataWipeResult(
 ///   2. Release steps: stop the relay, drop the cached field key, close the database and its
 ///      connection pool, close the log file. Nothing is deleted yet.
 ///   3. Write the erase-pending marker.
-///   4. Destroy the database key. If that fails, stop: nothing is deleted, the marker is
-///      removed, and the data is intact. So while the database key exists, no file has been
+///   4. Destroy the database key. If that fails, the vault is asked whether the key still
+///      unprotects: if it does, stop (nothing is deleted, the marker is removed, the data can
+///      still be opened); if the store cannot be read, stop too and keep the marker; if the
+///      key no longer works (a zeroed blob whose delete failed), the data is already
+///      unreadable and the erase goes on. So while the database key works, no file has been
 ///      deleted (start-up relies on this). Then destroy the other keys.
 ///   5. Delete Axon's files: the database first, then tokens, key blobs, logs, health report.
 ///      A locked file is retried, then reported; running the erase again finishes the job.
@@ -113,9 +126,9 @@ internal sealed record DataWipeResult(
 ///      folder and now empty.
 ///
 /// Links are never followed: a listed name that is a link (or any reparse point) is left in
-/// place and reported. If the data folder itself is a link, its final target must pass the
-/// same folder guard; Axon's files inside the target are deleted and the link and the target
-/// folder stay.
+/// place and reported. If the data folder itself is a link (a relocated folder, say a junction
+/// to D:\AxonData), its final target must not be a drive or share root, or a user or system
+/// folder; Axon's files inside the target are deleted and the link and the target folder stay.
 /// </summary>
 internal sealed class DataWipeService
 {
@@ -198,8 +211,8 @@ internal sealed class DataWipeService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return new DataWipeResult(DataWipeOutcome.NothingErased, [],
-                [$"The data folder {_dataDirectory} is a link that cannot be followed safely ({ex.Message})"], [], warnings);
+            return new DataWipeResult(DataWipeOutcome.NotStarted, [],
+                [$"the data folder {_dataDirectory} is a link that cannot be followed safely ({ex.Message})"], [], warnings);
         }
 
         // 1. Stop the work that uses the data. Nothing has been touched if this refuses.
@@ -232,19 +245,39 @@ internal sealed class DataWipeService
         if (Directory.Exists(root))
             await TryWriteMarkerAsync(marker, warnings).ConfigureAwait(false);
 
-        // 4. The database key first. Until it is gone nothing is deleted.
+        // 4. The database key first. While it still works, nothing is deleted.
+        bool keysDestroyed = true;
         try
         {
             await _vault.DestroyKeyAsync(AxonDbContextFactory.KeyLabel).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            TryDelete(marker);
-            return new DataWipeResult(DataWipeOutcome.NothingErased, [],
-                [$"the database encryption key could not be destroyed ({ex.Message})"], [], warnings);
+            // A failed destroy may still have zeroed the key (the DPAPI vault overwrites the
+            // blob before it deletes it), so ask whether it still works before saying anything.
+            var state = _vault is IVaultKeyInspector inspector
+                ? inspector.GetKeyState(AxonDbContextFactory.KeyLabel)
+                : VaultKeyState.Usable;
+            switch (state)
+            {
+                case VaultKeyState.Usable:
+                    TryDelete(marker);
+                    return new DataWipeResult(DataWipeOutcome.NothingErased, [],
+                        [$"the database encryption key could not be destroyed ({ex.Message})"], [], warnings);
+
+                case VaultKeyState.Unknown:
+                    return new DataWipeResult(DataWipeOutcome.Partial, [],
+                        [$"the database encryption key could not be destroyed ({ex.Message}), and whether it " +
+                         "still works cannot be checked, so nothing else was erased"], [], warnings);
+
+                default:
+                    // It no longer works (zeroed, delete failed): the database cannot be opened,
+                    // so the erase goes on. The leftover key file is one of Axon's files: the
+                    // steps below delete it or report it.
+                    break;
+            }
         }
 
-        bool keysDestroyed = true;
         foreach (var label in AxonDataFolder.KeyLabels.Where(l => l != AxonDbContextFactory.KeyLabel))
         {
             try
@@ -516,7 +549,7 @@ internal sealed class DataWipeService
 
         var target = folder.ResolveLinkTarget(returnFinalTarget: true)
             ?? throw new ArgumentException("it is a reparse point that does not resolve to a folder.");
-        return EnsureOwnFolder(target.FullName);
+        return EnsureSafeLinkTarget(target.FullName);
     }
 
     private static string Relative(string root, string path, FileSystemInfo? entry = null)
@@ -528,9 +561,30 @@ internal sealed class DataWipeService
     /// <summary>
     /// Refuse anything that is not plainly an app's own folder: a relative path, a drive
     /// root or a folder just below one, or a folder that is or holds the user's profile,
-    /// app-data, documents, desktop or temp folder.
+    /// app-data, documents, desktop or temp folder. This is for the configured path, where a
+    /// short path means a misconfiguration (an empty app-data path turning into ".\Axon").
     /// </summary>
     private static string EnsureOwnFolder(string dataDirectory)
+    {
+        var full = EnsureSafeLinkTarget(dataDirectory);
+        var root = Path.GetPathRoot(full)!;
+        if (full[root.Length..].Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries).Length < MinimumFolderDepth)
+        {
+            throw new ArgumentException($"Refusing to erase '{full}': it is too close to a drive root.", nameof(dataDirectory));
+        }
+
+        return full;
+    }
+
+    /// <summary>
+    /// The check for where a relocated data folder points (a junction to D:\AxonData is
+    /// fine): an absolute path that is not a drive or share root, and not a folder that is or
+    /// holds the user's profile, app-data, documents, desktop or temp folder. Only Axon's own
+    /// names are deleted there.
+    /// </summary>
+    internal static string EnsureSafeLinkTarget(string dataDirectory)
     {
         if (string.IsNullOrWhiteSpace(dataDirectory) || !Path.IsPathFullyQualified(dataDirectory))
             throw new ArgumentException("The data folder must be an absolute path.", nameof(dataDirectory));
@@ -538,11 +592,9 @@ internal sealed class DataWipeService
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory));
         var root = Path.GetPathRoot(full);
         if (string.IsNullOrEmpty(root)
-            || full[root.Length..].Split(
-                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                StringSplitOptions.RemoveEmptyEntries).Length < MinimumFolderDepth)
+            || string.Equals(full, Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException($"Refusing to erase '{full}': it is a drive root or too close to one.", nameof(dataDirectory));
+            throw new ArgumentException($"Refusing to erase '{full}': it is a drive or share root.", nameof(dataDirectory));
         }
 
         Environment.SpecialFolder[] protectedFolders =

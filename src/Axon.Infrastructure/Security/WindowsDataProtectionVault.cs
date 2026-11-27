@@ -15,7 +15,7 @@ namespace Axon.Infrastructure.Security;
 /// Callers MUST call <see cref="ZeroKey"/> in a <c>finally</c> block to wipe
 /// the in-memory copy.
 /// </summary>
-public sealed class WindowsDataProtectionVault : IHardwareVault
+public sealed class WindowsDataProtectionVault : IHardwareVault, IVaultKeyInspector
 {
     private readonly string _keyDirectory;
 
@@ -110,8 +110,47 @@ public sealed class WindowsDataProtectionVault : IHardwareVault
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /// <summary>True when the protected blob for <paramref name="keyLabel"/> is on disk.</summary>
-    public bool KeyExists(string keyLabel) => File.Exists(BlobPath(keyLabel));
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Present is not enough: an erase zeroes the blob before it deletes it, so a delete that
+    /// failed leaves a file that no longer unprotects. A blob that cannot be read at all
+    /// (access denied, locked) is <see cref="VaultKeyState.Unknown"/>, never "gone".
+    /// </remarks>
+    public VaultKeyState GetKeyState(string keyLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyLabel);
+        if (!OperatingSystem.IsWindows())
+            return VaultKeyState.Unknown;
+
+        // Read it rather than ask File.Exists, which answers "no" for a folder it may not enter.
+        byte[] blob;
+        try
+        {
+            blob = File.ReadAllBytes(BlobPath(keyLabel));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return VaultKeyState.Missing;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return VaultKeyState.Unknown;
+        }
+
+        if (blob.Length == 0)
+            return VaultKeyState.Unusable;
+
+        try
+        {
+            var key = UnprotectWindows(blob);
+            CryptographicOperations.ZeroMemory(key);
+            return VaultKeyState.Usable;
+        }
+        catch (CryptographicException)
+        {
+            return VaultKeyState.Unusable;
+        }
+    }
 
     /// <summary>
     /// The blob's file name for a logical key label: characters that are invalid in file

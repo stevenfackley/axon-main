@@ -40,6 +40,19 @@ public sealed class SettingsEraseTests
     }
 
     [Fact]
+    public void EraseCommand_ThatCannotStart_LeavesTheAppUnlocked()
+    {
+        var notStarted = new DataWipeResult(DataWipeOutcome.NotStarted, [],
+            ["the data folder is a link that cannot be followed safely"], [], []);
+        var settings = Armed(() => Task.FromResult(notStarted));
+
+        settings.EraseAllDataCommand.Execute(null);
+
+        Assert.False(settings.IsDataErased);
+        Assert.StartsWith("Nothing was erased: the data folder", settings.EraseStatusText);
+    }
+
+    [Fact]
     public void EraseDescription_ShowsTheFolder_AndSaysWhatIsLeft()
     {
         var settings = new SettingsViewModel(new AirGapState()) { DataFolderPath = @"C:\Users\someone\AppData\Local\Axon" };

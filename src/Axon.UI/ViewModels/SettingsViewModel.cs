@@ -379,8 +379,8 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         try
         {
             var result = await EraseHandler().ConfigureAwait(true);
-            if (result.Outcome == DataWipeOutcome.Refused)
-                IsDataErased = false;   // nothing was touched: the app carries on
+            if (result.Outcome is DataWipeOutcome.Refused or DataWipeOutcome.NotStarted)
+                IsDataErased = false;   // nothing was erased or closed: the app carries on
             IsEraseComplete = result.Complete;
             EraseStatusText = result.Complete
                 ? result.Describe() + "\n\nClose Axon to finish. It starts empty next time."
