@@ -89,7 +89,11 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     public string DataFolderPath
     {
         get => _dataFolderPath;
-        set => SetField(ref _dataFolderPath, value);
+        set
+        {
+            if (!SetField(ref _dataFolderPath, value)) return;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EraseDescription)));
+        }
     }
 
     private string _dataFootprintText = "—";
@@ -292,13 +296,16 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     /// <summary>What the erase does, exactly. Shown on the card.</summary>
     public string EraseDescription =>
-        "Permanently erases everything Axon stores on this device: your readings, tags and tag notes, " +
-        "the sync outbox, the audit log, the encryption keys, your Whoop sign-in, Axon's logs and its " +
-        "health report. " +
+        $"Permanently erases the files Axon itself keeps in {DataFolderPath}: the database with your " +
+        "readings, tags and tag notes, the sync outbox and the audit log; the encryption keys; the Whoop " +
+        "sign-in stored here; Axon's logs and its health report. Anything else in that folder is left " +
+        "where it is. " +
         (IsHardwareBacked
             ? "The keys are destroyed first, so a database file that cannot be deleted can no longer be decrypted. "
             : "") +
-        "This cannot be undone. Data in your Whoop account is not affected. " +
+        "This cannot be undone. Axon does not send your readings off this device, so there is no copy " +
+        "elsewhere for it to erase. Your Whoop account and the data Whoop holds are not affected; to " +
+        "withdraw Axon's access to your Whoop account, revoke it in your Whoop account settings. " +
         "Afterwards Axon has to be closed; it starts empty next time.";
 
     private string _eraseConfirmationText = "";
@@ -372,6 +379,8 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         try
         {
             var result = await EraseHandler().ConfigureAwait(true);
+            if (result.Outcome == DataWipeOutcome.Refused)
+                IsDataErased = false;   // nothing was touched: the app carries on
             IsEraseComplete = result.Complete;
             EraseStatusText = result.Complete
                 ? result.Describe() + "\n\nClose Axon to finish. It starts empty next time."

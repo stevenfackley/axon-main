@@ -58,6 +58,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _showAnalysisLabCommand = new DelegateCommand(
             () => ActiveWorkspace = ShellWorkspace.AnalysisLab, () => !Settings.IsDataErased);
         ShowSettingsCommand = new DelegateCommand(() => ActiveWorkspace = ShellWorkspace.Settings);
+        Settings.PropertyChanged += (_, e) =>
+        {
+            // Locked while an erase runs or after it; unlocked again if it was refused.
+            if (e.PropertyName != nameof(SettingsViewModel.IsDataErased)) return;
+            _showDashboardCommand.RaiseCanExecuteChanged();
+            _showAnalysisLabCommand.RaiseCanExecuteChanged();
+        };
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -249,14 +256,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>
     /// Settings has already locked itself to the erase card. The dashboard and the lab still
     /// hold readings in memory and read from the vault being erased, so they stay closed
-    /// from here on; after a complete erase the person closes the app.
+    /// from here on (unless the erase is refused); after a complete erase the person closes
+    /// the app.
     /// </summary>
     private async Task<DataWipeResult> EraseAllDataAsync()
     {
         ActiveWorkspace = ShellWorkspace.Settings;
-        _showDashboardCommand.RaiseCanExecuteChanged();
-        _showAnalysisLabCommand.RaiseCanExecuteChanged();
-        // File deletes and their retries run off the UI thread.
+        // Stopping the work and deleting the files, with their retries, run off the UI thread.
         return await Task.Run(_wipe.WipeAsync);
     }
 

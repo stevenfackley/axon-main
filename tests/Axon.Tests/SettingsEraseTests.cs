@@ -1,6 +1,7 @@
 using Axon.Core.Domain;
 using Axon.Core.Licensing;
 using Axon.Core.Ports;
+using Axon.Infrastructure.Persistence;
 using Axon.Infrastructure.Security;
 using Axon.UI.Application;
 using Axon.UI.Observability;
@@ -15,10 +16,39 @@ namespace Axon.Tests;
 /// </summary>
 public sealed class SettingsEraseTests
 {
-    private static readonly DataWipeResult Done = new(["Encryption keys", "Logs"], [], []);
+    private static readonly DataWipeResult Done =
+        new(DataWipeOutcome.Complete, ["Encryption keys", "Logs"], [], ["my-exports\\"], []);
 
     private static readonly DataWipeResult Partial =
-        new(["Encryption keys"], [@"logs\axon-20261127.log (The file is in use.)"], []);
+        new(DataWipeOutcome.Partial, ["Encryption keys"], [@"logs\axon-20261127.log (The file is in use.)"], [], []);
+
+    private static readonly DataWipeResult Refused =
+        new(DataWipeOutcome.Refused, [], ["the analysis that runs after a sync"], [], []);
+
+    [Fact]
+    public void EraseCommand_Refused_ErasesNothing_AndTheAppCarriesOn()
+    {
+        var settings = Armed(() => Task.FromResult(Refused));
+
+        settings.EraseAllDataCommand.Execute(null);
+
+        Assert.False(settings.IsDataErased);
+        Assert.False(settings.IsEraseComplete);
+        Assert.Contains("Nothing was erased, because this was still using your data: the analysis that runs after a sync",
+            settings.EraseStatusText);
+        Assert.True(settings.EraseAllDataCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void EraseDescription_ShowsTheFolder_AndSaysWhatIsLeft()
+    {
+        var settings = new SettingsViewModel(new AirGapState()) { DataFolderPath = @"C:\Users\someone\AppData\Local\Axon" };
+
+        Assert.Contains(@"C:\Users\someone\AppData\Local\Axon", settings.EraseDescription);
+        Assert.Contains("Anything else in that folder is left where it is", settings.EraseDescription);
+        Assert.Contains("revoke it in your Whoop account settings", settings.EraseDescription);
+        Assert.Contains("does not send your readings off this device", settings.EraseDescription);
+    }
 
     [Fact]
     public void EraseCommand_IsArmedOnlyByTheExactWord()
@@ -150,7 +180,40 @@ public sealed class SettingsEraseTests
 
         settings.IsHardwareBacked = true;
         Assert.Contains("can no longer be decrypted", settings.EraseDescription);
-        Assert.Contains("Data in your Whoop account is not affected", settings.EraseDescription);
+        Assert.Contains("Your Whoop account and the data Whoop holds are not affected", settings.EraseDescription);
+    }
+
+    [Fact]
+    public async Task Shell_EraseRefusedBecauseWorkKeptRunning_UnlocksTheApp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "axon-shell-refused-" + Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Combine(root, "Axon");
+        Directory.CreateDirectory(dataDir);
+        try
+        {
+            var activity = new VaultActivity();
+            using var stubborn = activity.TryBegin("a Whoop sync")!;
+            var shell = NewShell(new IdleRelay(), new DataWipeService(dataDir, new MockHardwareVault(), [], activity,
+                quiesceBound: TimeSpan.FromMilliseconds(50)));
+            var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            shell.Settings.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsViewModel.EraseStatusText) && shell.Settings.EraseStatusText.StartsWith("Nothing", StringComparison.Ordinal))
+                    finished.TrySetResult();
+            };
+            shell.Settings.EraseConfirmationText = "ERASE";
+
+            shell.Settings.EraseAllDataCommand.Execute(null);
+            await finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.False(shell.Settings.IsDataErased);
+            Assert.True(shell.ShowDashboardCommand.CanExecute(null));
+            Assert.Contains("a Whoop sync", shell.Settings.EraseStatusText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ }
+        }
     }
 
     [Fact]
@@ -163,17 +226,8 @@ public sealed class SettingsEraseTests
         try
         {
             var relay = new IdleRelay();
-            var shell = new MainWindowViewModel(
-                new DashboardViewModel(null!),
-                new AnalysisLabViewModel(null!, null!, null!),
-                relay,
-                NullObservabilityRuntime.Instance,
-                new WhoopSyncCoordinator(null!, null!, null!, null!, isConfigured: false),
-                new AirGapState(),
-                new DataImportCoordinator(null!),
-                new LicenseContext(LicenseTier.Free),
-                new DataWipeService(dataDir, new MockHardwareVault(),
-                    [new("Stopping the sync relay", () => relay.DisposeAsync())]));
+            var shell = NewShell(relay, new DataWipeService(dataDir, new MockHardwareVault(),
+                [new("Stopping the sync relay", () => relay.DisposeAsync())]));
             var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             shell.Settings.PropertyChanged += (_, e) =>
             {
@@ -212,6 +266,18 @@ public sealed class SettingsEraseTests
 
         Assert.Equal(0, outbox.Calls);
     }
+
+    private static MainWindowViewModel NewShell(IOutboxRelayService relay, DataWipeService wipe) =>
+        new(
+            new DashboardViewModel(null!),
+            new AnalysisLabViewModel(null!, null!, null!),
+            relay,
+            NullObservabilityRuntime.Instance,
+            new WhoopSyncCoordinator(null!, null!, null!, null!, isConfigured: false),
+            new AirGapState(),
+            new DataImportCoordinator(null!),
+            new LicenseContext(LicenseTier.Free),
+            wipe);
 
     private static SettingsViewModel Armed(Func<Task<DataWipeResult>> handler) =>
         new(new AirGapState())

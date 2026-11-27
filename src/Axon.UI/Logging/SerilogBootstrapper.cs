@@ -1,5 +1,6 @@
 // Desktop-only: not compiled on Android/iOS (no file system path or console sink needed there).
 #if !ANDROID && !IOS
+using Axon.UI.Application;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -23,7 +24,7 @@ internal static class SerilogBootstrapper
     /// </summary>
     public static ILoggerFactory CreateLoggerFactory(string dataDirectory)
     {
-        var logDirectory = Path.Combine(dataDirectory, "logs");
+        var logDirectory = Path.Combine(dataDirectory, AxonDataFolder.LogsFolder);
         Directory.CreateDirectory(logDirectory);
 
         var serilogLogger = new LoggerConfiguration()
@@ -41,7 +42,7 @@ internal static class SerilogBootstrapper
                 formatter: new Serilog.Formatting.Json.JsonFormatter(renderMessage: true))
             .WriteTo.File(
                 formatter: new Serilog.Formatting.Json.JsonFormatter(renderMessage: true),
-                path: Path.Combine(logDirectory, "axon-.log"),
+                path: Path.Combine(logDirectory, AxonDataFolder.LogFileTemplate),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 14,
                 fileSizeLimitBytes: 50 * 1024 * 1024, // 50 MB per day cap

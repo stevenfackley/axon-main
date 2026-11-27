@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Axon.UI.ViewModels"
+             x:Class="Axon.UI.Views.StartupEraseView"
+             x:DataType="vm:StartupEraseViewModel"
+             Background="#0F0F1A">
+
+    <!-- Shown instead of the app when an earlier erase did not finish. -->
+    <ScrollViewer>
+        <StackPanel Margin="32" Spacing="14" MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock Text="Unfinished erase" FontSize="22" FontWeight="Bold" Foreground="#E5E7EB" />
+            <TextBlock Text="{Binding Message}" Foreground="#B6C2D9" TextWrapping="Wrap" />
+            <StackPanel Spacing="6" IsVisible="{Binding IsAsking}">
+                <TextBlock Text="Type ERASE to confirm." FontSize="12" Foreground="#94A3B8" />
+                <TextBox Text="{Binding ConfirmationText}" PlaceholderText="ERASE"
+                         MaxWidth="240" HorizontalAlignment="Left" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Erase now" Command="{Binding EraseNowCommand}"
+                        IsVisible="{Binding IsAsking}" Background="#7F1D1D" Foreground="#F8FAFC" />
+                <Button Content="Cancel the erase" Command="{Binding CancelEraseCommand}"
+                        IsVisible="{Binding IsAsking}" />
+                <Button Content="Try again" Command="{Binding RetryCommand}"
+                        IsVisible="{Binding CanRetry}" />
+                <Button Content="Continue" Command="{Binding ContinueCommand}"
+                        IsVisible="{Binding CanContinue}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

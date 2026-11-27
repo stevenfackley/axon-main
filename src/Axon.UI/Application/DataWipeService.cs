@@ -1,8 +1,6 @@
 using System.Text;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Persistence;
-using Axon.Infrastructure.Persistence.Decorators;
-using Axon.Infrastructure.Security;
 
 namespace Axon.UI.Application;
 
@@ -12,48 +10,79 @@ namespace Axon.UI.Application;
 /// </summary>
 internal sealed record WipeReleaseStep(string Description, Func<ValueTask> ReleaseAsync);
 
-/// <summary>What an erase removed, and what is still on this device.</summary>
-/// <param name="Erased">Kinds of data that are gone.</param>
-/// <param name="NotErased">Every key or file that is still there, with the reason.</param>
-/// <param name="Warnings">Steps that failed without leaving data behind.</param>
+internal enum DataWipeOutcome
+{
+    /// <summary>Every file Axon wrote is gone and the keys are destroyed.</summary>
+    Complete,
+
+    /// <summary>Some of Axon's files or keys are still there; erasing again finishes the job.</summary>
+    Partial,
+
+    /// <summary>Work on the data was still running, so nothing was touched; the app carries on.</summary>
+    Refused,
+
+    /// <summary>The database key could not be destroyed, so nothing was deleted; the data is intact.</summary>
+    NothingErased,
+}
+
+/// <summary>What an erase removed, what is still on this device, and what it left alone.</summary>
+/// <param name="Erased">Kinds of Axon data that are gone.</param>
+/// <param name="NotErased">Every key or Axon file still there, with the reason (for
+/// <see cref="DataWipeOutcome.Refused"/>: the work that was still running).</param>
+/// <param name="LeftInPlace">Entries in the data folder that Axon did not create.</param>
+/// <param name="Warnings">Steps that failed without leaving Axon data behind.</param>
 internal sealed record DataWipeResult(
+    DataWipeOutcome Outcome,
     IReadOnlyList<string> Erased,
     IReadOnlyList<string> NotErased,
+    IReadOnlyList<string> LeftInPlace,
     IReadOnlyList<string> Warnings)
 {
     /// <summary>True only when nothing Axon stored remains.</summary>
-    public bool Complete => NotErased.Count == 0;
+    public bool Complete => Outcome == DataWipeOutcome.Complete;
 
-    /// <summary>Plain-language summary for the person, listing what was and was not erased.</summary>
+    /// <summary>Plain-language summary for the person: what was and was not erased, and what was left alone.</summary>
     public string Describe()
     {
         var text = new StringBuilder();
-        if (Complete)
+        switch (Outcome)
         {
-            text.Append("Everything Axon stored on this device has been erased.");
-        }
-        else
-        {
-            text.Append("Not everything could be erased. Still on this device:");
-            AppendList(text, NotErased);
+            case DataWipeOutcome.Refused:
+                text.Append("Nothing was erased, because this was still using your data: ")
+                    .Append(string.Join(", ", NotErased))
+                    .Append(". Wait for it to finish, then erase again.");
+                return text.ToString();
+
+            case DataWipeOutcome.NothingErased:
+                text.Append("Nothing was erased:");
+                AppendList(text, NotErased);
+                text.Append("\n\nYour data is still on this device and can still be opened. " +
+                            "Restart Axon to keep using it, or erase again.");
+                break;
+
+            case DataWipeOutcome.Complete:
+                text.Append("Everything Axon stored on this device has been erased.");
+                AppendSection(text, "Erased:", Erased);
+                break;
+
+            default:
+                text.Append("Not everything could be erased. Still on this device:");
+                AppendList(text, NotErased);
+                AppendSection(text, "Erased:", Erased);
+                text.Append("\n\nClose any program that is using these files, then erase again.");
+                break;
         }
 
-        if (Erased.Count > 0)
-        {
-            text.Append(Complete ? "\nErased:" : "\n\nErased:");
-            AppendList(text, Erased);
-        }
-
-        if (!Complete)
-            text.Append("\n\nClose any program that is using these files, then erase again.");
-
-        if (Warnings.Count > 0)
-        {
-            text.Append("\n\nNotes:");
-            AppendList(text, Warnings);
-        }
-
+        AppendSection(text, "Left in place (not created by Axon):", LeftInPlace);
+        AppendSection(text, "Notes:", Warnings);
         return text.ToString();
+    }
+
+    private static void AppendSection(StringBuilder text, string heading, IReadOnlyList<string> items)
+    {
+        if (items.Count == 0) return;
+        text.Append("\n\n").Append(heading);
+        AppendList(text, items);
     }
 
     private static void AppendList(StringBuilder text, IReadOnlyList<string> items)
@@ -64,82 +93,92 @@ internal sealed record DataWipeResult(
 }
 
 /// <summary>
-/// Erases everything Axon stores about the person on this device: the "Erase all data"
-/// action in Settings.
+/// Erases what Axon stores about the person on this device: the "Erase all data" action in
+/// Settings. It deletes only the files Axon itself writes, by name (see
+/// <see cref="AxonDataFolder"/>); anything else in the folder is left and reported.
 ///
-/// Everything Axon writes lives in one data folder (<c>%LOCALAPPDATA%\Axon</c> on Windows):
-///   • <c>axon.vault.db</c> (+ <c>-wal</c>, <c>-shm</c>, <c>-journal</c>): the SQLCipher database
-///     with the readings, tags and annotations, the sync outbox and the audit log;
-///   • <c>keys\*.key</c>: the DPAPI-protected keys for the database, the field encryption and the
-///     token files (on platforms whose vault is the OS keychain, the keys live there instead);
-///   • <c>tokens\*.token</c>: the encrypted OAuth tokens (Whoop today);
-///   • <c>logs\axon-*.log</c>: the rolling application log;
-///   • <c>health\status.json</c>: the relay health report.
+/// Order (after checking where the files are, see the link rule below):
+///   1. Stop the work that uses the data (<see cref="VaultActivity.QuiesceAsync"/>), or
+///      refuse with nothing touched if it does not stop in time.
+///   2. Release steps: stop the relay, drop the cached field key, close the database and its
+///      connection pool, close the log file. Nothing is deleted yet.
+///   3. Write the erase-pending marker.
+///   4. Destroy the database key. If that fails, stop: nothing is deleted, the marker is
+///      removed, and the data is intact. So while the database key exists, no file has been
+///      deleted (start-up relies on this). Then destroy the other keys.
+///   5. Delete Axon's files: the database first, then tokens, key blobs, logs, health report.
+///      A locked file is retried, then reported; running the erase again finishes the job.
+///   6. Check again, remove Axon's emptied sub-folders, and remove the marker last, only when
+///      none of Axon's files is left. The data folder itself goes only if it is a plain
+///      folder and now empty.
 ///
-/// Order: mark the erase as started, run the release steps (stop the relay, drop the cached
-/// field key, close the database and its connection pool, close the log file), destroy the
-/// keys through the vault, then delete every file in the data folder (the database first),
-/// then the folder. Destroying the keys first means a database or token file that cannot be
-/// deleted is left encrypted under a key that no longer exists. Logs and the health report
-/// are not encrypted, so they are only gone once deleted.
-///
-/// Failure: a locked file is retried a few times, then reported. Nothing is reported as
-/// erased that is still there, and running the erase again finishes the job. The marker
-/// file stays until nothing is left, so an erase that was cut short is finished at the next
-/// start before anything opens the data (see <see cref="IsPending"/>).
-///
-/// Nothing outside the data folder is touched: links inside it are removed, never followed.
+/// Links are never followed: a listed name that is a link (or any reparse point) is left in
+/// place and reported. If the data folder itself is a link, its final target must pass the
+/// same folder guard; Axon's files inside the target are deleted and the link and the target
+/// folder stay.
 /// </summary>
 internal sealed class DataWipeService
 {
-    /// <summary>Name of the marker file that says an erase has started but not finished.</summary>
-    internal const string PendingMarkerName = "erase-pending";
-
-    /// <summary>Every vault key Axon derives.</summary>
-    internal static readonly IReadOnlyList<string> AppKeyLabels =
-    [
-        AxonDbContextFactory.KeyLabel,
-        EncryptionDecorator.EncKeyLabel,
-        EncryptedFileOAuthTokenStore.TokenKeyLabel,
-    ];
-
     private const int DeleteAttempts = 4;
+
+    /// <summary>A data folder must sit at least this many folders below its drive root.</summary>
+    private const int MinimumFolderDepth = 2;
 
     private const string DatabaseCategory = "Database: readings, tags, sync outbox and audit log";
     private const string KeysCategory = "Encryption keys";
     private const string TokensCategory = "Whoop sign-in (stored tokens)";
     private const string LogsCategory = "Logs";
     private const string HealthCategory = "Health report";
-    private const string OtherCategory = "Other files in the data folder";
 
     private static readonly string[] CategoryOrder =
-        [KeysCategory, DatabaseCategory, TokensCategory, LogsCategory, HealthCategory, OtherCategory];
+        [KeysCategory, DatabaseCategory, TokensCategory, LogsCategory, HealthCategory];
 
     private readonly string _dataDirectory;
     private readonly IHardwareVault _vault;
     private readonly IReadOnlyList<WipeReleaseStep> _releaseSteps;
-    private readonly IReadOnlyList<string> _keyLabels;
+    private readonly VaultActivity? _activity;
+    private readonly TimeSpan _quiesceBound;
     private readonly TimeSpan _retryDelay;
 
     public DataWipeService(
         string dataDirectory,
         IHardwareVault vault,
         IReadOnlyList<WipeReleaseStep> releaseSteps,
-        IReadOnlyList<string>? keyLabels = null,
+        VaultActivity? activity = null,
+        TimeSpan? quiesceBound = null,
         TimeSpan? retryDelay = null)
     {
         _dataDirectory = EnsureOwnFolder(dataDirectory);
         _vault = vault;
         _releaseSteps = releaseSteps;
-        _keyLabels = keyLabels ?? AppKeyLabels;
+        _activity = activity;
+        _quiesceBound = quiesceBound ?? TimeSpan.FromSeconds(5);
         _retryDelay = retryDelay ?? TimeSpan.FromMilliseconds(250);
     }
 
+    /// <summary>The data folder this service erases.</summary>
+    public string DataDirectory => _dataDirectory;
+
     /// <summary>True when an erase started in <paramref name="dataDirectory"/> has not finished.</summary>
     public static bool IsPending(string dataDirectory) =>
-        File.Exists(Path.Combine(dataDirectory, PendingMarkerName));
+        File.Exists(Path.Combine(dataDirectory, AxonDataFolder.ErasePendingMarker));
 
-    private string MarkerPath => Path.Combine(_dataDirectory, PendingMarkerName);
+    /// <summary>
+    /// Forgets an unfinished erase the person chose not to finish: removes the marker and
+    /// nothing else. Returns why that failed, or null.
+    /// </summary>
+    public string? CancelPending()
+    {
+        try
+        {
+            File.Delete(Path.Combine(ResolveRoot(out _), AxonDataFolder.ErasePendingMarker));
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return ex.Message;
+        }
+    }
 
     /// <summary>
     /// Runs the erase. Not cancellable: once the keys are gone, stopping halfway would only
@@ -150,21 +189,28 @@ internal sealed class DataWipeService
         var notErased = new List<string>();
         var warnings = new List<string>();
 
-        // 1. Record that an erase is under way, so one that cannot finish now is finished
-        //    at the next start, before the vault is opened again.
-        if (Directory.Exists(_dataDirectory))
+        // Where the files are, checked before anything is stopped or touched.
+        string root;
+        bool rootIsLink;
+        try
         {
-            try
-            {
-                await File.WriteAllBytesAsync(MarkerPath, []).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                warnings.Add($"Could not record that an erase is under way: {ex.Message}");
-            }
+            root = ResolveRoot(out rootIsLink);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return new DataWipeResult(DataWipeOutcome.NothingErased, [],
+                [$"The data folder {_dataDirectory} is a link that cannot be followed safely ({ex.Message})"], [], warnings);
         }
 
-        // 2. Make everything that uses the data let go of it.
+        // 1. Stop the work that uses the data. Nothing has been touched if this refuses.
+        if (_activity is not null)
+        {
+            var running = await _activity.QuiesceAsync(_quiesceBound).ConfigureAwait(false);
+            if (running.Count > 0)
+                return new DataWipeResult(DataWipeOutcome.Refused, [], running, [], []);
+        }
+
+        // 2. Let go of the data.
         foreach (var step in _releaseSteps)
         {
             try
@@ -177,9 +223,29 @@ internal sealed class DataWipeService
             }
         }
 
-        // 3. Destroy the keys before deleting any file.
+        if (rootIsLink)
+            warnings.Add($"The data folder is a link to {root}. Axon's files there were erased; the link and that folder were left in place.");
+
+        var marker = Path.Combine(root, AxonDataFolder.ErasePendingMarker);
+
+        // 3. Record that an erase is under way, so start-up knows about one that is cut short.
+        if (Directory.Exists(root))
+            await TryWriteMarkerAsync(marker, warnings).ConfigureAwait(false);
+
+        // 4. The database key first. Until it is gone nothing is deleted.
+        try
+        {
+            await _vault.DestroyKeyAsync(AxonDbContextFactory.KeyLabel).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            TryDelete(marker);
+            return new DataWipeResult(DataWipeOutcome.NothingErased, [],
+                [$"the database encryption key could not be destroyed ({ex.Message})"], [], warnings);
+        }
+
         bool keysDestroyed = true;
-        foreach (var label in _keyLabels)
+        foreach (var label in AxonDataFolder.KeyLabels.Where(l => l != AxonDbContextFactory.KeyLabel))
         {
             try
             {
@@ -192,136 +258,196 @@ internal sealed class DataWipeService
             }
         }
 
-        // 4. Delete every file in the data folder, the database first.
-        var found = new HashSet<string>(StringComparer.Ordinal);
+        // 5. Delete Axon's own files, the database first.
+        var before = Collect(root);
+        var found = new HashSet<string>(before.AxonFiles.Select(f => f.Category), StringComparer.Ordinal);
         var failed = new HashSet<string>(StringComparer.Ordinal);
         var failedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var (leaves, directories) = Walk(notErased);
-        foreach (var leaf in leaves.OrderBy(DeletePriority))
+        foreach (var (file, category) in before.AxonFiles.OrderBy(f => f.Category == DatabaseCategory ? 0 : 1))
         {
-            var category = CategoryOf(leaf.FullName);
-            found.Add(category);
-            var error = await TryDeleteAsync(leaf).ConfigureAwait(false);
-            if (error is not null)
-            {
-                failed.Add(category);
-                failedPaths.Add(leaf.FullName);
-                notErased.Add($"{RelativePath(leaf.FullName)} ({error})");
-            }
+            var error = await TryDeleteAsync(file).ConfigureAwait(false);
+            if (error is null) continue;
+            failed.Add(category);
+            failedPaths.Add(file.FullName);
+            notErased.Add($"{Relative(root, file.FullName)} ({error})");
         }
 
-        // 5. Check nothing came back (a write that was still in flight), then remove the
-        //    folders, the marker and the data folder itself.
-        var (stragglers, _) = Walk([]);
-        foreach (var leaf in stragglers.Where(l => !failedPaths.Contains(l.FullName)))
+        // 6. Look again: anything of Axon's still there (written while the erase ran, behind
+        //    a link, or unreadable) keeps the erase unfinished.
+        var after = Collect(root);
+        foreach (var (file, category) in after.AxonFiles.Where(f => !failedPaths.Contains(f.File.FullName)))
         {
-            found.Add(CategoryOf(leaf.FullName));
-            failed.Add(CategoryOf(leaf.FullName));
-            notErased.Add($"{RelativePath(leaf.FullName)} (written while the erase ran)");
+            failed.Add(category);
+            notErased.Add($"{Relative(root, file.FullName)} (written while the erase ran)");
         }
 
-        foreach (var directory in directories)
-            TryDeleteEmptyDirectory(directory, warnings);
-
-        if (notErased.Count == 0 && Directory.Exists(_dataDirectory))
+        foreach (var (path, category) in after.Links)
         {
-            try
-            {
-                File.Delete(MarkerPath);
-                Directory.Delete(_dataDirectory);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                warnings.Add($"The empty data folder could not be removed: {ex.Message}");
-            }
+            failed.Add(category);
+            notErased.Add($"{path} is a link or other reparse point, which Axon does not create; " +
+                          "it and what it points to were left in place");
         }
-        else if (notErased.Count > 0 && Directory.Exists(_dataDirectory) && !File.Exists(MarkerPath))
+
+        notErased.AddRange(after.Unreadable);
+
+        foreach (var folder in new[] { AxonDataFolder.TokensFolder, AxonDataFolder.KeysFolder, AxonDataFolder.LogsFolder, AxonDataFolder.HealthFolder })
+            TryRemoveEmptyFolder(Path.Combine(root, folder), warnings);
+
+        // The marker goes last, and only when nothing of Axon's is left.
+        if (notErased.Count == 0)
         {
-            // Step 1 could not write it; without it the next start would not finish the erase.
-            try
-            {
-                await File.WriteAllBytesAsync(MarkerPath, []).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                warnings.Add($"Could not record that the erase is unfinished: {ex.Message}");
-            }
+            var markerError = File.Exists(marker) ? TryDelete(marker) : null;
+            if (markerError is not null)
+                notErased.Add($"{AxonDataFolder.ErasePendingMarker} ({markerError})");
+            else if (!rootIsLink)
+                TryRemoveEmptyFolder(root, warnings);
+        }
+        else if (Directory.Exists(root) && !File.Exists(marker))
+        {
+            await TryWriteMarkerAsync(marker, warnings).ConfigureAwait(false);
+        }
+
+        if (!_vault.IsHardwareBacked)
+        {
+            warnings.Add("This build uses the development key store, whose keys are derived from fixed " +
+                         "names, so there were no stored keys to destroy.");
         }
 
         var erased = CategoryOrder
             .Where(c => c == KeysCategory
-                ? keysDestroyed && !failed.Contains(KeysCategory)
+                ? _vault.IsHardwareBacked && keysDestroyed && !failed.Contains(KeysCategory)
                 : found.Contains(c) && !failed.Contains(c))
             .ToList();
 
-        return new DataWipeResult(erased, notErased, warnings);
+        var outcome = notErased.Count == 0 ? DataWipeOutcome.Complete : DataWipeOutcome.Partial;
+        return new DataWipeResult(outcome, erased, notErased, after.Unlisted, warnings);
     }
 
-    // ── Files ─────────────────────────────────────────────────────────────────
+    // ── What is in the folder ─────────────────────────────────────────────────
+
+    private sealed class Inventory
+    {
+        public List<(FileInfo File, string Category)> AxonFiles { get; } = [];
+
+        /// <summary>Listed names that are links: never entered, never deleted.</summary>
+        public List<(string Path, string Category)> Links { get; } = [];
+
+        /// <summary>Entries Axon did not create (folders are listed as a whole).</summary>
+        public List<string> Unlisted { get; } = [];
+
+        public List<string> Unreadable { get; } = [];
+    }
 
     /// <summary>
-    /// Lists every file in the data folder (hidden and system files included) and every
-    /// sub-folder, children before parents. A link is listed as a leaf and never entered,
-    /// so deleting it removes the link and not what it points to.
+    /// Sorts the top of the data folder, and the inside of Axon's own sub-folders, into
+    /// Axon's files, links where Axon's names should be, and entries that are not Axon's.
+    /// Does not enter any other folder and never follows a link.
     /// </summary>
-    private (List<FileSystemInfo> Leaves, List<DirectoryInfo> Directories) Walk(List<string> notErased)
+    private static Inventory Collect(string root)
     {
-        var leaves = new List<FileSystemInfo>();
-        var directories = new List<DirectoryInfo>();
-        if (!Directory.Exists(_dataDirectory))
-            return (leaves, directories);
+        var inventory = new Inventory();
+        if (!Directory.Exists(root))
+            return inventory;
 
-        var options = new EnumerationOptions
+        (string Name, Func<string, bool> IsAxonsFile, string Category)[] ownFolders =
+        [
+            (AxonDataFolder.TokensFolder, AxonDataFolder.IsTokenFile, TokensCategory),
+            (AxonDataFolder.KeysFolder, n => AxonDataFolder.KeyFiles.Contains(n, StringComparer.OrdinalIgnoreCase), KeysCategory),
+            (AxonDataFolder.LogsFolder, AxonDataFolder.IsLogFile, LogsCategory),
+            (AxonDataFolder.HealthFolder, n => n.Equals(AxonDataFolder.HealthFileName, StringComparison.OrdinalIgnoreCase), HealthCategory),
+        ];
+
+        foreach (var entry in List(root, root, inventory))
         {
-            AttributesToSkip = FileAttributes.None,
-            IgnoreInaccessible = false,
-            RecurseSubdirectories = false,
-        };
+            var name = entry.Name;
+            if (name.Equals(AxonDataFolder.ErasePendingMarker, StringComparison.OrdinalIgnoreCase) && IsPlainFile(entry))
+                continue;
 
-        void Visit(DirectoryInfo folder)
-        {
-            IEnumerable<FileSystemInfo> entries;
-            try
+            if (AxonDataFolder.DatabaseFiles.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
-                entries = folder.EnumerateFileSystemInfos("*", options).ToList();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                notErased.Add($"{RelativePath(folder.FullName)} (its contents could not be listed: {ex.Message})");
-                return;
+                Sort(root, entry, DatabaseCategory, inventory);
+                continue;
             }
 
-            foreach (var entry in entries)
+            var own = ownFolders.FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (own.Name is null)
             {
-                if (entry is DirectoryInfo sub && !sub.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                inventory.Unlisted.Add(Relative(root, entry.FullName, entry));
+            }
+            else if (IsLink(entry))
+            {
+                inventory.Links.Add((Relative(root, entry.FullName, entry), own.Category));
+            }
+            else if (entry is not DirectoryInfo)
+            {
+                inventory.Unlisted.Add(Relative(root, entry.FullName, entry));
+            }
+            else
+            {
+                foreach (var child in List(entry.FullName, root, inventory))
                 {
-                    Visit(sub);
-                    directories.Add(sub);
-                }
-                else if (!IsMarker(entry.FullName))
-                {
-                    leaves.Add(entry);
+                    if (own.IsAxonsFile(child.Name))
+                        Sort(root, child, own.Category, inventory);
+                    else
+                        inventory.Unlisted.Add(Relative(root, child.FullName, child));
                 }
             }
         }
 
-        Visit(new DirectoryInfo(_dataDirectory));
-        return (leaves, directories);
+        return inventory;
     }
 
-    /// <summary>Deletes one file or link, retrying while it is locked. Returns why it failed, or null.</summary>
-    private async Task<string?> TryDeleteAsync(FileSystemInfo leaf)
+    /// <summary>An entry with one of Axon's names: a plain file is Axon's; anything else is not.</summary>
+    private static void Sort(string root, FileSystemInfo entry, string category, Inventory inventory)
+    {
+        if (IsLink(entry))
+            inventory.Links.Add((Relative(root, entry.FullName, entry), category));
+        else if (entry is FileInfo file)
+            inventory.AxonFiles.Add((file, category));
+        else
+            inventory.Unlisted.Add(Relative(root, entry.FullName, entry));
+    }
+
+    private static List<FileSystemInfo> List(string folder, string root, Inventory inventory)
+    {
+        try
+        {
+            return new DirectoryInfo(folder)
+                .EnumerateFileSystemInfos("*", new EnumerationOptions
+                {
+                    AttributesToSkip = FileAttributes.None,
+                    IgnoreInaccessible = false,
+                    RecurseSubdirectories = false,
+                })
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            inventory.Unreadable.Add($"{Relative(root, folder)} (its contents could not be listed: {ex.Message})");
+            return [];
+        }
+    }
+
+    /// <summary>Symbolic links and junctions are reparse points; so is anything else Axon did not write plainly.</summary>
+    private static bool IsLink(FileSystemInfo entry) => entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
+
+    private static bool IsPlainFile(FileSystemInfo entry) => entry is FileInfo && !IsLink(entry);
+
+    // ── Deleting ──────────────────────────────────────────────────────────────
+
+    /// <summary>Deletes one plain file, retrying while it is locked. Returns why it failed, or null.</summary>
+    private async Task<string?> TryDeleteAsync(FileInfo file)
     {
         for (int attempt = 1; ; attempt++)
         {
             try
             {
-                leaf.Refresh();
-                if (!leaf.Exists)
+                file.Refresh();
+                if (!file.Exists)
                     return null;
-                if (leaf.Attributes.HasFlag(FileAttributes.ReadOnly))
-                    leaf.Attributes &= ~FileAttributes.ReadOnly;
-                leaf.Delete();
+                if (file.Attributes.HasFlag(FileAttributes.ReadOnly))
+                    file.Attributes &= ~FileAttributes.ReadOnly;
+                file.Delete();
                 return null;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -334,58 +460,75 @@ internal sealed class DataWipeService
         }
     }
 
-    private static void TryDeleteEmptyDirectory(DirectoryInfo directory, List<string> warnings)
+    private static string? TryDelete(string path)
     {
         try
         {
-            directory.Refresh();
-            if (directory.Exists && !directory.EnumerateFileSystemInfos().Any())
-                directory.Delete();
+            File.Delete(path);
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            warnings.Add($"An empty folder could not be removed: {directory.Name} ({ex.Message})");
+            return ex.Message;
         }
     }
 
-    private bool IsMarker(string path) =>
-        string.Equals(path, MarkerPath, StringComparison.OrdinalIgnoreCase);
-
-    private int DeletePriority(FileSystemInfo leaf) => CategoryOf(leaf.FullName) switch
+    private static async Task TryWriteMarkerAsync(string marker, List<string> warnings)
     {
-        DatabaseCategory => 0,
-        TokensCategory => 1,
-        KeysCategory => 2,
-        _ => 3,
-    };
-
-    private string CategoryOf(string path)
-    {
-        var relative = RelativePath(path);
-        var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
-        if (separator < 0)
+        try
         {
-            return relative.StartsWith(AxonDbContextFactory.DbFileName, StringComparison.OrdinalIgnoreCase)
-                ? DatabaseCategory
-                : OtherCategory;
+            await File.WriteAllBytesAsync(marker, []).ConfigureAwait(false);
         }
-
-        return relative[..separator].ToLowerInvariant() switch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            "keys" => KeysCategory,
-            "tokens" => TokensCategory,
-            "logs" => LogsCategory,
-            "health" => HealthCategory,
-            _ => OtherCategory,
-        };
+            warnings.Add($"Could not record that an erase is under way: {ex.Message}");
+        }
     }
 
-    private string RelativePath(string path) => Path.GetRelativePath(_dataDirectory, path);
+    /// <summary>Removes a plain folder that is now empty; leaves links and non-empty folders.</summary>
+    private static void TryRemoveEmptyFolder(string path, List<string> warnings)
+    {
+        try
+        {
+            var folder = new DirectoryInfo(path);
+            if (!folder.Exists || IsLink(folder) || folder.EnumerateFileSystemInfos().Any())
+                return;
+            folder.Delete();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warnings.Add($"An empty folder could not be removed: {path} ({ex.Message})");
+        }
+    }
+
+    // ── Paths ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// The erase deletes the whole folder, so refuse anything that is not plainly an app's
-    /// own folder: a relative path, a drive root, or a folder that is or holds the user's
-    /// profile, app-data, documents, desktop or temp folder.
+    /// The folder the files are in: the data folder, or the final target when the data
+    /// folder is a link, which must pass the same guard.
+    /// </summary>
+    private string ResolveRoot(out bool isLink)
+    {
+        var folder = new DirectoryInfo(_dataDirectory);
+        isLink = folder.Exists && IsLink(folder);
+        if (!isLink)
+            return _dataDirectory;
+
+        var target = folder.ResolveLinkTarget(returnFinalTarget: true)
+            ?? throw new ArgumentException("it is a reparse point that does not resolve to a folder.");
+        return EnsureOwnFolder(target.FullName);
+    }
+
+    private static string Relative(string root, string path, FileSystemInfo? entry = null)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        return entry is DirectoryInfo ? relative + Path.DirectorySeparatorChar : relative;
+    }
+
+    /// <summary>
+    /// Refuse anything that is not plainly an app's own folder: a relative path, a drive
+    /// root or a folder just below one, or a folder that is or holds the user's profile,
+    /// app-data, documents, desktop or temp folder.
     /// </summary>
     private static string EnsureOwnFolder(string dataDirectory)
     {
@@ -395,9 +538,11 @@ internal sealed class DataWipeService
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory));
         var root = Path.GetPathRoot(full);
         if (string.IsNullOrEmpty(root)
-            || string.Equals(full, Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase))
+            || full[root.Length..].Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries).Length < MinimumFolderDepth)
         {
-            throw new ArgumentException("Refusing to erase a drive root.", nameof(dataDirectory));
+            throw new ArgumentException($"Refusing to erase '{full}': it is a drive root or too close to one.", nameof(dataDirectory));
         }
 
         Environment.SpecialFolder[] protectedFolders =

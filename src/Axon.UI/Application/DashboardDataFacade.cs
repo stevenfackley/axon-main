@@ -1,6 +1,7 @@
 using Axon.Core.Domain;
 using Axon.Core.Ports;
 using Axon.Infrastructure.Analytics;
+using Axon.Infrastructure.Persistence;
 
 namespace Axon.UI.Application;
 
@@ -18,15 +19,19 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
 
     private readonly IBiometricRepository _repository;
     private readonly IInferenceService _inferenceService;
+    private readonly VaultActivity? _activity;
     private readonly IChartSeriesStrategy[] _chartSeriesStrategies;
 
+    /// <param name="activity">When set, each load is tracked so the data erase can stop it.</param>
     public DashboardDataFacade(
         IBiometricRepository repository,
         IInferenceService inferenceService,
+        VaultActivity? activity,
         params IChartSeriesStrategy[] chartSeriesStrategies)
     {
         _repository = repository;
         _inferenceService = inferenceService;
+        _activity = activity;
         _chartSeriesStrategies = chartSeriesStrategies;
     }
 
@@ -36,6 +41,11 @@ internal sealed class DashboardDataFacade : IDashboardDataFacade
         DateTimeOffset viewportEnd,
         CancellationToken ct = default)
     {
+        using var operation = _activity?.TryBegin("the dashboard load", ct);
+        if (_activity is not null && operation is null)
+            throw new OperationCanceledException("Axon's data is being erased.");
+        ct = operation?.Token ?? ct;
+
         var span = viewportEnd - viewportStart;
         var chartStrategy = ResolveChartStrategy(span);
 

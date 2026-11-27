@@ -110,11 +110,14 @@ public sealed class WindowsDataProtectionVault : IHardwareVault
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /// <summary>True when the protected blob for <paramref name="keyLabel"/> is on disk.</summary>
+    public bool KeyExists(string keyLabel) => File.Exists(BlobPath(keyLabel));
+
     /// <summary>
-    /// Converts a logical key label to a safe file name by replacing
-    /// characters that are invalid in file names with underscores.
+    /// The blob's file name for a logical key label: characters that are invalid in file
+    /// names are replaced with underscores, then <c>.key</c> is appended.
     /// </summary>
-    private string BlobPath(string label)
+    public static string KeyFileName(string label)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var safe = string.Create(label.Length, (label, invalid), static (span, state) =>
@@ -124,8 +127,10 @@ public sealed class WindowsDataProtectionVault : IHardwareVault
                 span[i] = Array.IndexOf(inv, src[i]) >= 0 ? '_' : src[i];
         });
 
-        return Path.Combine(_keyDirectory, $"{safe}.key");
+        return $"{safe}.key";
     }
+
+    private string BlobPath(string label) => Path.Combine(_keyDirectory, KeyFileName(label));
 
     [SupportedOSPlatform("windows")]
     private static byte[] ProtectWindows(byte[] data) =>

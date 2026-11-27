@@ -145,9 +145,9 @@ internal sealed class JsonHealthReportWriter : IHealthReportWriter
 
     public JsonHealthReportWriter(string dataDirectory)
     {
-        var reportDirectory = Path.Combine(dataDirectory, "health");
+        var reportDirectory = Path.Combine(dataDirectory, global::Axon.UI.Application.AxonDataFolder.HealthFolder);
         Directory.CreateDirectory(reportDirectory);
-        _reportPath = Path.Combine(reportDirectory, "status.json");
+        _reportPath = Path.Combine(reportDirectory, global::Axon.UI.Application.AxonDataFolder.HealthFileName);
     }
 
     public async Task WriteAsync(global::Axon.UI.Application.RelaySnapshot snapshot, CancellationToken ct = default)

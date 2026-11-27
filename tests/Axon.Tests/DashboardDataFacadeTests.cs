@@ -158,7 +158,7 @@ public sealed class DashboardDataFacadeTests
     }
 
     private static DashboardDataFacade NewFacade(IBiometricRepository repository, IInferenceService inference) =>
-        new(repository, inference, new RawChartSeriesStrategy(TimeSpan.FromDays(400), threshold: 100_000));
+        new(repository, inference, activity: null, new RawChartSeriesStrategy(TimeSpan.FromDays(400), threshold: 100_000));
 
     /// <summary>Throws from each model unless an answer is set for it.</summary>
     private sealed class ThrowingInference : IInferenceService
